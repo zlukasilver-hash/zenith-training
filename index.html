@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+  <title>ZENITH RP — Тренировки</title>
+  <meta
+    name="description"
+    content="Система тренировок для ролевой по Котам-воителям."
+  />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body data-theme="crimsonNight">
+  <div class="site-shell">
+    <div class="background-decor">
+      <span class="decor-star decor-star-1">✦</span>
+      <span class="decor-star decor-star-2">✶</span>
+      <span class="decor-star decor-star-3">✦</span>
+      <span class="decor-star decor-star-4">✶</span>
+      <span class="decor-rune decor-rune-1">⟡</span>
+      <span class="decor-rune decor-rune-2">✧</span>
+      <span class="decor-rune decor-rune-3">⟡</span>
+      <span class="decor-blood decor-blood-1"></span>
+      <span class="decor-blood decor-blood-2"></span>
+      <span class="decor-blood decor-blood-3"></span>
+    </div>
+
+    <header class="hero-banner">
+      <div class="hero-overlay"></div>
+      <div class="hero-noise"></div>
+
+      <div class="hero-inner">
+        <div class="hero-topline">
+          <span class="hero-mark">✦</span>
+          <span class="hero-subtitle">zenith rp</span>
+          <span class="hero-mark">✦</span>
+        </div>
+
+        <h1 class="hero-title">
+          ZENITH
+          <span class="hero-title-break">TRAINING SYSTEM</span>
+        </h1>
+
+        <p class="hero-text">
+          Сайт полуролевой "Зенит" для удобства в тренировках.
+        </p>
+
+      </div>
+    </header>
+
+    <section class="feed-strip">
+      <div class="feed-strip-label">✦ Лента тренировок</div>
+      <div class="feed-strip-track">
+        <div id="feedTicker" class="feed-strip-content"></div>
+      </div>
+    </section>
+
+    <nav class="top-nav">
+      <div class="top-nav-left">
+        <div id="currentUserBadge" class="current-user-badge">✦ Гость ✦</div>
+        <div id="globalNotice" class="global-notice">Добро пожаловать!</div>
+      </div>
+
+      <div class="top-nav-center">
+        <button id="openProfileBtn" type="button" class="nav-btn">Профиль</button>
+        <button id="openRoomBtn" type="button" class="nav-btn">Комната</button>
+        <button id="openHistoryBtn" type="button" class="nav-btn hidden">Мои тренировки</button>
+        <button id="openPublicProfilesBtn" type="button" class="nav-btn hidden">Профили</button>
+        <button id="openAdminBtn" type="button" class="nav-btn hidden">Админка</button>
+      </div>
+
+      <div class="top-nav-right">
+        <label class="theme-picker">
+          <span>Тема</span>
+          <select id="themeSelect" class="theme-select">
+            <option value="crimsonNight">багровая ночь</option>
+            <option value="moonlight">лунный свет</option>
+            <option value="forestDweller">житель леса</option>
+          </select>
+        </label>
+
+        <button id="mainLogoutBtn" type="button" class="nav-btn nav-btn-danger">
+          Выйти
+        </button>
+      </div>
+    </nav>
+
+    <main class="page-shell">
+      <section id="authScreen" class="screen-card">
+        <div class="screen-head">
+          <div class="screen-kicker">✦ Вход</div>
+          <h2 class="screen-title">Аккаунт игрока</h2>
+          <p class="screen-text">
+            Войди в систему или создай профиль, чтобы открыть доступ к комнатам,
+            тренировкам и истории своих персонажей.
+          </p>
+        </div>
+
+        <div class="auth-layout">
+          <div class="auth-form-card">
+            <label class="field-block">
+              <span class="field-label">Имя профиля</span>
+              <input
+                id="accountName"
+                type="text"
+                class="field-input"
+                placeholder="Например, Зенит"
+              />
+            </label>
+
+            <label class="field-block">
+              <span class="field-label">Почта</span>
+              <input
+                id="emailInput"
+                type="email"
+                class="field-input"
+                placeholder="example@mail.com"
+              />
+            </label>
+
+            <label class="field-block">
+              <span class="field-label">Пароль</span>
+              <input
+                id="passwordInput"
+                type="password"
+                class="field-input"
+                placeholder="••••••••"
+              />
+            </label>
+
+            <div class="auth-actions">
+              <button id="registerBtn" type="button" class="primary-btn">
+                Зарегистрироваться
+              </button>
+              <button id="loginBtn" type="button" class="secondary-btn">
+                Войти
+              </button>
+              <button id="logoutBtn" type="button" class="ghost-btn">
+                Выйти из auth
+              </button>
+            </div>
+
+            <div id="authStatus" class="auth-status">
+              Вы не вошли в аккаунт.
+            </div>
+          </div>
+
+          <div class="auth-side-card">
+            <div class="auth-side-top">✦ Перед входом</div>
+            <ul class="auth-side-list">
+              <li>создай профиль игрока;</li>
+              <li>добавь персонажей и выбери активного;</li>
+              <li>открывай комнату и начинай тренировку;</li>
+              <li>отслеживай улучшения, зачёты и историю.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="profileScreen" class="screen-card hidden">
+        <div class="screen-head">
+          <div class="screen-kicker">✦ Профиль</div>
+          <h2 class="screen-title">Игрок и персонажи</h2>
+          <p class="screen-text">
+            Здесь хранится всё главное: твой статус, активный персонаж,
+            тренировочная статистика, усиления и личные заметки.
+          </p>
+        </div>
+
+        <div class="profile-layout">
+          <aside class="profile-side">
+            <div class="profile-main-card">
+              <div class="profile-portrait-wrap">
+                <div class="profile-portrait-frame">
+                  <div id="profilePortraitInitials" class="profile-portrait-initials">
+                    ✦
+                  </div>
+                </div>
+              </div>
+
+              <div class="profile-name-block">
+                <h3 id="profileName" class="profile-name">Зенит</h3>
+                <p id="profileStatusText" class="profile-status-text">
+                  ✦ Наблюдает за бабочками
+                </p>
+              </div>
+
+              <div class="field-stack">
+                <label class="field-block">
+                  <span class="field-label">Статус профиля</span>
+                  <input
+                    id="profileStatusInput"
+                    type="text"
+                    class="field-input"
+                    placeholder="Напиши короткий статус"
+                  />
+                </label>
+
+                <button id="saveProfileBtn" type="button" class="primary-btn">
+                  Сохранить статус
+                </button>
+              </div>
+
+              <div class="field-stack">
+                <label class="field-block">
+                  <span class="field-label">Знак профиля</span>
+                  <select id="profileSymbolSelect" class="field-select">
+                    <option value="✦">✦</option>
+                    <option value="✶">✶</option>
+                    <option value="⟡">⟡</option>
+                    <option value="✧">✧</option>
+                    <option value="☽">☽</option>
+                    <option value="☾">☾</option>
+                    <option value="❖">❖</option>
+                    <option value="✹">✹</option>
+                  </select>
+                </label>
+
+                <button id="savePortraitSymbolBtn" type="button" class="secondary-btn">
+                  Сохранить знак
+                </button>
+              </div>
+
+              <div class="field-stack">
+                <label class="field-block">
+                  <span class="field-label">Активный персонаж</span>
+                  <select id="activeCharacterSelect" class="field-select">
+                    <option value="">✦ Сначала добавь персонажа ✦</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="profile-note-card">
+              <div class="card-title-row">
+                <span class="card-title-mark">✦</span>
+                <h3 class="card-title-text">Личная заметка</h3>
+              </div>
+
+              <label class="field-block">
+                <span class="field-label">Текст заметки</span>
+                <textarea
+                  id="ownerNoteInput"
+                  class="field-textarea"
+                  rows="6"
+                  placeholder="Любые личные пометки о персонаже"
+                ></textarea>
+              </label>
+
+              <button id="saveOwnerNoteBtn" type="button" class="secondary-btn">
+                Сохранить заметку
+              </button>
+            </div>
+          </aside>
+
+          <div class="profile-main">
+            <div class="create-character-card">
+              <div class="card-title-row">
+                <span class="card-title-mark">✦</span>
+                <h3 class="card-title-text">Новый персонаж</h3>
+              </div>
+
+              <div class="create-character-grid">
+                <label class="field-block">
+                  <span class="field-label">Имя</span>
+                  <input
+                    id="charNameInput"
+                    type="text"
+                    class="field-input"
+                    placeholder="Имя персонажа"
+                  />
+                </label>
+
+                <label class="field-block">
+                  <span class="field-label">Племя</span>
+                  <input
+                    id="charClanInput"
+                    type="text"
+                    class="field-input"
+                    placeholder="Например, Грозовое"
+                  />
+                </label>
+
+                <label class="field-block">
+                  <span class="field-label">Статус</span>
+                  <select id="charTrainingStatusSelect" class="field-select">
+                    <option value="warrior">Воитель</option>
+                    <option value="apprentice">Оруженосец</option>
+                  </select>
+                </label>
+
+                <div class="field-block field-block-button">
+                  <span class="field-label">Добавление</span>
+                  <button id="addCharacterBtn" type="button" class="primary-btn">
+                    Добавить персонажа
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="characters-panel">
+              <div class="panel-head">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">Персонажи</h3>
+                </div>
+
+                <label class="field-inline">
+                  <span class="field-inline-label">Поиск</span>
+                  <input
+                    id="characterSearchInput"
+                    type="text"
+                    class="field-input"
+                    placeholder="Имя персонажа"
+                  />
+                </label>
+              </div>
+
+              <div id="charactersList" class="characters-list">
+                <div class="empty-state-card">
+                  <div class="empty-state-mark">✦</div>
+                  <div class="empty-state-text">Добавь первого персонажа.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="roomScreen" class="screen-card hidden">
+        <div class="screen-head">
+          <div class="screen-kicker">✦ Комната</div>
+          <h2 class="screen-title">Тренировочная комната</h2>
+          <p class="screen-text">
+            Создавай комнату, копируй код, зови второго игрока и запускай
+            тренировку после взаимной готовности.
+          </p>
+        </div>
+
+        <div class="room-layout">
+          <aside class="room-side">
+            <div class="room-card">
+              <div class="card-title-row">
+                <span class="card-title-mark">✦</span>
+                <h3 class="card-title-text">Текущий игрок</h3>
+              </div>
+
+              <div class="room-side-line">
+                <span>Профиль</span>
+                <strong id="playerNameMirror">—</strong>
+              </div>
+
+              <div class="room-side-line">
+                <span>Активный персонаж</span>
+                <strong id="activeCharacterMirror">—</strong>
+              </div>
+            </div>
+
+            <div class="room-card">
+              <div class="card-title-row">
+                <span class="card-title-mark">✦</span>
+                <h3 class="card-title-text">Управление комнатой</h3>
+              </div>
+
+              <label class="field-block">
+                <span class="field-label">Код комнаты</span>
+                <input
+                  id="roomCodeInput"
+                  type="text"
+                  class="field-input field-uppercase"
+                  placeholder="Например, AX5K9Q"
+                  maxlength="6"
+                />
+              </label>
+
+              <div class="room-actions-grid">
+                <button id="createRoomBtn" type="button" class="primary-btn">
+                  Создать
+                </button>
+                <button id="joinRoomBtn" type="button" class="secondary-btn">
+                  Войти
+                </button>
+                <button id="copyRoomCodeBtn" type="button" class="ghost-btn">
+                  Скопировать код
+                </button>
+                <button id="leaveRoomBtn" type="button" class="ghost-btn ghost-btn-danger">
+                  Покинуть
+                </button>
+              </div>
+
+              <div class="room-actions-grid room-actions-grid-single">
+                <button id="readyToggleBtn" type="button" class="primary-btn">
+                  Готов / не готов
+                </button>
+                <button id="startBattleBtn" type="button" class="ghost-btn">
+                  Старт вручную
+                </button>
+              </div>
+            </div>
+
+            <div class="room-card room-credit-card">
+              <div class="card-title-row">
+                <span class="card-title-mark">✦</span>
+                <h3 class="card-title-text">Зачёт тренировки</h3>
+              </div>
+
+              <div id="trainingCreditBadge" class="training-credit-badge">
+                Зачёта не будет
+              </div>
+              <div id="trainingCreditReasonBox" class="training-credit-reason">
+                Сначала создай комнату или войди в неё.
+              </div>
+            </div>
+          </aside>
+
+          <div class="room-main">
+            <div class="room-status-board">
+              <div class="room-status-top">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">Состояние комнаты</h3>
+                </div>
+
+                <div class="room-timer-box">
+                  <span class="room-timer-label">Таймер</span>
+                  <strong id="roomTimer" class="room-timer-value">00:00</strong>
+                </div>
+              </div>
+
+              <div id="roomMeta" class="room-meta">
+                <div class="room-meta-line">◈ Статус: ожидание</div>
+                <div class="room-meta-line">◈ Комната: —</div>
+              </div>
+
+              <pre id="statusLog" class="status-log">
+Пока ничего не происходит.
+              </pre>
+            </div>
+
+            <div id="roomPlayers" class="room-players-slot">
+              <div class="empty-state-card">
+                <div class="empty-state-mark">✦</div>
+                <div class="empty-state-text">Пока вы не подключены ни к одной комнате.</div>
+              </div>
+            </div>
+
+            <div id="waitingStateBox" class="waiting-state-box"></div>
+            <div id="roomResultCard" class="room-result-box"></div>
+            <div id="battleScreen" class="room-battle-embed hidden">
+  <div class="battle-layout">
+    <div class="battle-main">
+      <div id="battleInfo" class="battle-info-shell"></div>
+
+      <div class="battle-controls-card">
+        <div class="battle-controls-top">
+          <div class="card-title-row">
+            <span class="card-title-mark">✦</span>
+            <h3 class="card-title-text">Выбор действия</h3>
+          </div>
+
+          <div id="opponentChosenBadge" class="opponent-chosen-badge">
+            Соперник ещё думает
+          </div>
+        </div>
+
+        <div id="battleActions" class="battle-actions">
+          <button id="attackActionBtn" type="button" class="primary-btn battle-action-btn">
+            Напасть
+          </button>
+          <button id="defendActionBtn" type="button" class="secondary-btn battle-action-btn">
+            Защита / уворот
+          </button>
+          <button id="escapeActionBtn" type="button" class="ghost-btn battle-action-btn">
+            Убежать
+          </button>
+        </div>
+
+        <div id="attackMenu" class="battle-actions hidden">
+          <button id="sandAttackBtn" type="button" class="primary-btn battle-action-btn">
+            Песок в глаза
+          </button>
+          <button id="pawAttackBtn" type="button" class="primary-btn battle-action-btn">
+            Удар лапой
+          </button>
+          <button id="tripAttackBtn" type="button" class="primary-btn battle-action-btn">
+            Подсечка
+          </button>
+          <button id="backToActionsBtn" type="button" class="ghost-btn battle-action-btn">
+            Назад
+          </button>
+        </div>
+
+        <div id="targetMenu" class="battle-target-grid hidden">
+          <button id="faceTargetBtn" type="button" class="secondary-btn battle-action-btn">
+            Морда
+          </button>
+          <button id="frontLeftTargetBtn" type="button" class="secondary-btn battle-action-btn">
+            Передняя левая лапа
+          </button>
+          <button id="frontRightTargetBtn" type="button" class="secondary-btn battle-action-btn">
+            Передняя правая лапа
+          </button>
+          <button id="sideTargetBtn" type="button" class="secondary-btn battle-action-btn">
+            Бок
+          </button>
+          <button id="earsTargetBtn" type="button" class="secondary-btn battle-action-btn">
+            Уши
+          </button>
+          <button id="neckTargetBtn" type="button" class="secondary-btn battle-action-btn">
+            Шея
+          </button>
+          <button id="backToAttackMenuBtn" type="button" class="ghost-btn battle-action-btn battle-target-back">
+            Назад
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="battle-log-card">
+      <div class="card-title-row">
+        <span class="card-title-mark">✦</span>
+        <h3 class="card-title-text">Журнал тренировки</h3>
+      </div>
+
+      <div id="battleLog" class="battle-log">
+        <div class="battle-log-empty">
+          <span class="battle-log-empty-mark">✦</span>
+          <span>Пока нет записей.</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+          </div>
+        </div>
+      </section>
+      
+      <section id="historyScreen" class="screen-card hidden">
+        <div class="screen-head">
+          <div class="screen-kicker">✦ Архив</div>
+          <h2 class="screen-title">Мои тренировки</h2>
+          <p class="screen-text">
+            История всех завершённых тренировок по твоим персонажам, разложенная
+            по отдельным блокам.
+          </p>
+        </div>
+
+        <div id="myTrainingsList" class="history-list">
+          <div class="empty-state-card">
+            <div class="empty-state-mark">✦</div>
+            <div class="empty-state-text">История тренировок пока пуста.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="publicProfilesScreen" class="screen-card hidden">
+        <div class="screen-head">
+          <div class="screen-kicker">✦ Галерея</div>
+          <h2 class="screen-title">Профили персонажей</h2>
+          <p class="screen-text">
+            Открывай чужие профили, смотри улучшения, любимые приёмы и
+            тренировочную статистику.
+          </p>
+        </div>
+
+        <div class="public-profiles-layout">
+          <aside class="public-profiles-side">
+            <div class="public-search-card">
+              <div class="card-title-row">
+                <span class="card-title-mark">✦</span>
+                <h3 class="card-title-text">Поиск персонажа</h3>
+              </div>
+
+              <label class="field-block">
+                <span class="field-label">Имя</span>
+                <input
+                  id="publicProfileSearchInput"
+                  type="text"
+                  class="field-input"
+                  placeholder="Имя персонажа"
+                />
+              </label>
+
+              <button id="publicProfileSearchBtn" type="button" class="primary-btn">
+                Найти
+              </button>
+            </div>
+
+            <div id="publicProfilesList" class="public-profiles-list">
+              <div class="empty-state-card">
+                <div class="empty-state-mark">✦</div>
+                <div class="empty-state-text">Персонажи появятся здесь.</div>
+              </div>
+            </div>
+          </aside>
+
+          <div id="publicProfileDetails" class="public-profile-details">
+            <div class="empty-state-card">
+              <div class="empty-state-mark">✦</div>
+              <div class="empty-state-text">Выберите персонажа слева.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="adminScreen" class="screen-card hidden">
+        <div class="screen-head">
+          <div class="screen-kicker">✦ Админка</div>
+          <h2 class="screen-title">Управление системой</h2>
+          <p class="screen-text">
+            Просмотр игроков, персонажей, комнат, истории и зависших тренировок.
+          </p>
+        </div>
+
+        <div id="adminSummary" class="admin-summary-shell"></div>
+
+        <div class="admin-layout">
+          <div class="admin-column">
+            <div class="admin-card">
+              <div class="admin-card-top">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">Игроки</h3>
+                </div>
+              </div>
+              <div id="adminPlayersList" class="admin-scroll-list"></div>
+            </div>
+
+            <div class="admin-card">
+              <div class="admin-card-top">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">История игрока</h3>
+                </div>
+              </div>
+              <div id="adminPlayerHistoryList" class="admin-scroll-list"></div>
+            </div>
+          </div>
+
+          <div class="admin-column">
+            <div class="admin-card">
+              <div class="admin-card-top">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">Персонажи</h3>
+                </div>
+
+                <div class="admin-tools-row">
+                  <input
+                    id="adminCharacterSearchInput"
+                    type="text"
+                    class="field-input"
+                    placeholder="Имя персонажа"
+                  />
+                  <button id="adminCharacterSearchBtn" type="button" class="secondary-btn">
+                    Найти
+                  </button>
+                  <button id="adminRefreshBtn" type="button" class="ghost-btn">
+                    Обновить
+                  </button>
+                </div>
+              </div>
+
+              <div id="adminCharactersList" class="admin-scroll-list"></div>
+            </div>
+
+            <div class="admin-card">
+              <div class="admin-card-top">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">Комнаты</h3>
+                </div>
+              </div>
+              <div id="adminRoomsList" class="admin-scroll-list"></div>
+            </div>
+          </div>
+
+          <div class="admin-column">
+            <div class="admin-card">
+              <div class="admin-card-top">
+                <div class="card-title-row">
+                  <span class="card-title-mark">✦</span>
+                  <h3 class="card-title-text">Завершённые тренировки</h3>
+                </div>
+              </div>
+              <div id="adminMatchesList" class="admin-scroll-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./script.js"></script>
+</body>
+</html>
