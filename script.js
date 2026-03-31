@@ -71,9 +71,13 @@ const LOCAL_KEYS = {
 };
 
 const THEMES = {
-  crimsonNight: { id: "crimsonNight", label: "багровая ночь" },
-  moonlight: { id: "moonlight", label: "лунный свет" },
-  forestDweller: { id: "forestDweller", label: "житель леса" }
+  crimsonNight: { id: "crimsonNight", label: "Багровая ночь" },
+  blackCherry: { id: "blackCherry", label: "Тёмная вишня" },
+  amberNight: { id: "amberNight", label: "Янтарь" },
+  moonlight: { id: "moonlight", label: "Лунный свет" },
+  frostLake: { id: "frostLake", label: "Ледяное озеро" },
+  forestDweller: { id: "forestDweller", label: "Житель леса" },
+  heatherMist: { id: "heatherMist", label: "Вереск" }
 };
 
 const CHANCES = {
@@ -180,6 +184,7 @@ const ui = {
   shell: {
     currentUserBadge: byId("currentUserBadge"),
     globalNotice: byId("globalNotice"),
+    currentRoomBadge: byId("currentRoomBadge"),
     openProfileBtn: byId("openProfileBtn"),
     openRoomBtn: byId("openRoomBtn"),
     openAdminBtn: byId("openAdminBtn"),
@@ -1767,6 +1772,7 @@ function handleSignedOutUser() {
   state.shownRulesByRoom = {};
 
   text(ui.auth.status, "Вы не вошли в аккаунт.");
+  renderRoomBadge();
 }
 
 function createDefaultBattleAnalytics() {
@@ -3258,13 +3264,32 @@ function renderUserBadge() {
   text(ui.shell.currentUserBadge, `✦ ${name} ✦`);
 }
 
+function renderRoomBadge(roomCode = "", roomStatus = "") {
+  if (!ui.shell.currentRoomBadge) return;
+
+  const hasRoom = Boolean(roomCode);
+  ui.shell.currentRoomBadge.classList.toggle("hidden", !hasRoom);
+
+  if (!hasRoom) {
+    text(ui.shell.currentRoomBadge, "✦ Комната: —");
+    return;
+  }
+
+  const statusText = roomStatus ? ` · ${getRoomStatusLabel(roomStatus)}` : "";
+  text(ui.shell.currentRoomBadge, `✦ Комната ${roomCode}${statusText}`);
+}
+
 function renderThemeSelector() {
   if (!ui.shell.themeSelect) return;
 
   ui.shell.themeSelect.innerHTML = `
     <option value="${THEMES.crimsonNight.id}">${THEMES.crimsonNight.label}</option>
+    <option value="${THEMES.blackCherry.id}">${THEMES.blackCherry.label}</option>
+    <option value="${THEMES.amberNight.id}">${THEMES.amberNight.label}</option>
     <option value="${THEMES.moonlight.id}">${THEMES.moonlight.label}</option>
+    <option value="${THEMES.frostLake.id}">${THEMES.frostLake.label}</option>
     <option value="${THEMES.forestDweller.id}">${THEMES.forestDweller.label}</option>
+    <option value="${THEMES.heatherMist.id}">${THEMES.heatherMist.label}</option>
   `;
   ui.shell.themeSelect.value = state.activeTheme;
 }
@@ -3540,6 +3565,7 @@ function setRoomStatus(value) {
 }
 
 function renderRoomIdleState() {
+  renderRoomBadge();
   text(ui.room.playerNameMirror, state.userProfile?.displayName || "—");
 
   const activeCharacter = getCharacterById(getSelectedCharacterId());
@@ -3639,14 +3665,19 @@ function setBattleLog(logItems) {
   const oldLength = state.lastRenderedLogLength;
   ui.battle.log.innerHTML = list.map((item, index) => {
     const isNew = index >= oldLength;
-    const mark = index === list.length - 1 ? "✦" : "•";
+    const isLatest = index === list.length - 1;
+    const mark = isLatest ? "✦" : "•";
     return `
-      <div class="battle-log-entry ${isNew ? "battle-log-entry-new" : ""}">
+      <div class="battle-log-entry ${isNew ? "battle-log-entry-new" : ""} ${isLatest ? "battle-log-entry-latest" : ""}">
         <div class="battle-log-mark">${mark}</div>
         <div class="battle-log-text">${escapeHtml(String(item))}</div>
       </div>
     `;
   }).join("");
+
+  if (list.length > oldLength) {
+    ui.battle.log.scrollTop = ui.battle.log.scrollHeight;
+  }
 
   state.lastRenderedLogLength = list.length;
 }
@@ -3725,6 +3756,13 @@ function renderWaitingState(room) {
   ui.room.waitingStateBox.innerHTML = "";
 }
 
+function getDodgePipsHtml(dodgesLeft) {
+  return Array.from({ length: MAX_DODGES }, (_, index) => {
+    const active = index < dodgesLeft;
+    return `<span class="battle-dodge-pip ${active ? "is-active" : ""}">✦</span>`;
+  }).join("");
+}
+
 function renderRoomResultCard(room) {
   if (room.status !== "finished") {
     ui.room.roomResultCard.innerHTML = "";
@@ -3794,6 +3832,10 @@ function renderBattleForPlayer(room, battle) {
     }
   }
 
+  const selectedActionChip = mySelection
+    ? `<div class="battle-chip battle-chip-selected">◈ Ваш выбор: ${escapeHtml(getSelectionLabel(mySelection))}</div>`
+    : `<div class="battle-chip battle-chip-soft">◈ Выбор ещё не сделан</div>`;
+
   let effectsHtml = "";
 
   if (myEffects.accuracyPenaltyTurns > 0) {
@@ -3820,6 +3862,7 @@ function renderBattleForPlayer(room, battle) {
         <div class="battle-chip battle-chip-active">✦ Ход ${battle.turnNumber}</div>
         <div class="battle-chip">◈ Ваш персонаж: ${escapeHtml(battle.playerNames[myRole] || "—")}</div>
         <div class="battle-chip">◈ Соперник: ${escapeHtml(battle.playerNames[enemyRole] || "—")}</div>
+        ${selectedActionChip}
       </div>
 
       <div class="battle-bars-wrap">
@@ -3835,8 +3878,9 @@ function renderBattleForPlayer(room, battle) {
           <div class="battle-stat-value">−${myEffects.dotDamage}% за ход</div>
         </div>
         <div class="battle-stat">
-          <div class="battle-stat-label">Уворотов осталось</div>
-          <div class="battle-stat-value">${myEffects.dodgesLeft}</div>
+          <div class="battle-stat-label">Увороты</div>
+          <div class="battle-dodge-pips">${getDodgePipsHtml(myEffects.dodgesLeft)}</div>
+          <div class="battle-stat-subtext">Осталось: ${myEffects.dodgesLeft} из ${MAX_DODGES}</div>
         </div>
       </div>
 
@@ -3968,6 +4012,7 @@ function renderRoom(roomCode, room) {
   }
 
   state.currentRoomCode = roomCode;
+  renderRoomBadge(roomCode, room.status);
   renderRoomPlayers(room);
   renderCreditPreview(room);
   renderWaitingState(room);
