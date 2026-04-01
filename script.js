@@ -21,26 +21,6 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-/*
-  ZENITH RP — TRAINING SYSTEM
-  script.js — ЧАСТЬ 1 ИЗ 3
-
-  В этой части:
-  — firebase, константы, ui, state
-  — утилиты
-  — кастомные уведомления и модалки
-  — игровые правила для плашки комнаты
-  — модели данных
-  — нормализация данных
-  — логика улучшений
-  — профиль и персонажи
-  — базовые auth-хелперы
-
-  Дальше будут:
-  — комнаты, готовность, бой, зачёт, история
-  — рендеры, админка, бинды, init
-*/
-
 const firebaseConfig = {
   apiKey: "AIzaSyDPXjtn1FMRBGrHQhMKPlsczQn0OXgVWvg",
   authDomain: "zenit-a314c.firebaseapp.com",
@@ -54,10 +34,9 @@ const firebaseConfig = {
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
-const ROOM_RULES_VERSION = "room_rules_v2_2026_03_31";
 
 const ROOM_CODE_LENGTH = 6;
-const MAX_LOG_ITEMS = 36;
+const MAX_LOG_ITEMS = 60;
 const MAX_DODGES = 4;
 const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
 const READY_TIMEOUT_MS = 10 * 60 * 1000;
@@ -65,9 +44,9 @@ const PAIR_COOLDOWN_DAYS = 3;
 const FEED_LIMIT = 20;
 
 const LOCAL_KEYS = {
-  activeRoom: "zenith_active_room_v3",
-  theme: "zenith_theme_v3",
-  readRules: "zenith_read_rules_v3"
+  activeRoom: "zenith_active_room_v4",
+  theme: "zenith_theme_v4",
+  cardStyle: "zenith_card_style_v2"
 };
 
 const THEMES = {
@@ -77,28 +56,31 @@ const THEMES = {
   moonlight: { id: "moonlight", label: "Лунный свет" },
   frostLake: { id: "frostLake", label: "Ледяное озеро" },
   forestDweller: { id: "forestDweller", label: "Житель леса" },
-  heatherMist: { id: "heatherMist", label: "Вереск" }
+  heatherMist: { id: "heatherMist", label: "Вереск" },
+  eclipse: { id: "eclipse", label: "Затмение" },
+  obsidian: { id: "obsidian", label: "Обсидиан" },
+  ashen: { id: "ashen", label: "Пепел" },
+  mist: { id: "mist", label: "Туман" },
+  parchment: { id: "parchment", label: "Пергамент" },
+  autumn: { id: "autumn", label: "Осень" }
 };
 
-const CHANCES = {
-  sand: 50,
-  paw: 45,
-  trip: 40,
-  dodge: 40
+const CARD_STYLES = {
+  smooth: { id: "smooth", label: "Гладкие" },
+  antique: { id: "antique", label: "Старинные" },
+  sharp: { id: "sharp", label: "Острые" },
+  velvet: { id: "velvet", label: "Бархатные" }
 };
 
-const DAMAGE = {
-  paw: 5,
-  pawNeck: 10,
-  trip: 10
+const ROOM_MODES = {
+  duel: { id: "duel", label: "Дуэль" },
+  teams: { id: "teams", label: "Команды" },
+  ffa: { id: "ffa", label: "Каждый сам за себя" }
 };
 
-const DOT = {
-  paw: 5,
-  pawNeck: 10,
-  trip: 10
-};
-
+const CHANCES = { sand: 50, paw: 45, trip: 40, dodge: 40 };
+const DAMAGE = { paw: 5, pawNeck: 10, trip: 10 };
+const DOT = { paw: 5, pawNeck: 10, trip: 10 };
 const SAND_ACCURACY_PENALTY = 10;
 const SAND_PENALTY_TURNS = 2;
 
@@ -117,38 +99,16 @@ const TRAINING_THRESHOLDS = {
 };
 
 const UPGRADE_DEFINITIONS = {
-  accuracy: {
-    id: "accuracy",
-    label: "Шанс попадания",
-    increment: 10,
-    cap: 70,
-    maxCount: 5,
-    unit: "%"
-  },
-  dodge: {
-    id: "dodge",
-    label: "Шанс уворота",
-    increment: 10,
-    cap: 70,
-    maxCount: 5,
-    unit: "%"
-  },
-  clawPower: {
-    id: "clawPower",
-    label: "Сила удара: удар когтями",
-    increment: 5,
-    cap: 30,
-    maxCount: 5,
-    unit: "%"
-  },
-  bitePower: {
-    id: "bitePower",
-    label: "Сила удара: укус",
-    increment: 5,
-    cap: 30,
-    maxCount: 5,
-    unit: "%"
-  }
+  accuracy: { id: "accuracy", label: "Шанс попадания", increment: 10, cap: 70, maxCount: 5, unit: "%" },
+  dodge: { id: "dodge", label: "Шанс уворота", increment: 10, cap: 70, maxCount: 5, unit: "%" },
+  clawPower: { id: "clawPower", label: "Сила удара лапой", increment: 5, cap: 30, maxCount: 5, unit: "%" },
+  bitePower: { id: "bitePower", label: "Сила подсечки", increment: 5, cap: 30, maxCount: 5, unit: "%" }
+};
+
+const FEED_TYPES = {
+  CREDITED_TRAINING: "credited_training",
+  UPGRADE_GAINED: "upgrade_gained",
+  PROMOTION_TRANSFER: "promotion_transfer"
 };
 
 const RESULT_TYPES = {
@@ -156,12 +116,6 @@ const RESULT_TYPES = {
   LOSS: "loss",
   DRAW: "draw",
   UNFINISHED: "unfinished"
-};
-
-const FEED_TYPES = {
-  CREDITED_TRAINING: "credited_training",
-  UPGRADE_GAINED: "upgrade_gained",
-  PROMOTION_TRANSFER: "promotion_transfer"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -180,7 +134,6 @@ const ui = {
     history: byId("historyScreen"),
     publicProfiles: byId("publicProfilesScreen")
   },
-
   shell: {
     currentUserBadge: byId("currentUserBadge"),
     globalNotice: byId("globalNotice"),
@@ -192,9 +145,9 @@ const ui = {
     openPublicProfilesBtn: byId("openPublicProfilesBtn"),
     mainLogoutBtn: byId("mainLogoutBtn"),
     themeSelect: byId("themeSelect"),
+    cardStyleSelect: byId("cardStyleSelect"),
     feedTicker: byId("feedTicker")
   },
-
   auth: {
     accountName: byId("accountName"),
     email: byId("emailInput"),
@@ -204,7 +157,6 @@ const ui = {
     logoutBtn: byId("logoutBtn"),
     status: byId("authStatus")
   },
-
   profile: {
     name: byId("profileName"),
     statusText: byId("profileStatusText"),
@@ -223,7 +175,6 @@ const ui = {
     ownerNoteInput: byId("ownerNoteInput"),
     saveOwnerNoteBtn: byId("saveOwnerNoteBtn")
   },
-
   room: {
     playerNameMirror: byId("playerNameMirror"),
     activeCharacterMirror: byId("activeCharacterMirror"),
@@ -241,55 +192,38 @@ const ui = {
     creditReasonBox: byId("trainingCreditReasonBox"),
     waitingStateBox: byId("waitingStateBox"),
     roomTimer: byId("roomTimer"),
-    roomResultCard: byId("roomResultCard")
+    roomResultCard: byId("roomResultCard"),
+    roomModeSelect: byId("roomModeSelect"),
+    saveRoomSettingsBtn: byId("saveRoomSettingsBtn"),
+    roomValidationBox: byId("roomValidationBox")
   },
-
   battle: {
     screen: byId("battleScreen"),
     info: byId("battleInfo"),
     log: byId("battleLog"),
     actions: byId("battleActions"),
     attackMenu: byId("attackMenu"),
-    targetMenu: byId("targetMenu"),
+    attackBuilderList: byId("attackBuilderList"),
     attackActionBtn: byId("attackActionBtn"),
     defendActionBtn: byId("defendActionBtn"),
     escapeActionBtn: byId("escapeActionBtn"),
-    sandAttackBtn: byId("sandAttackBtn"),
-    pawAttackBtn: byId("pawAttackBtn"),
-    tripAttackBtn: byId("tripAttackBtn"),
+    confirmAttackPlanBtn: byId("confirmAttackPlanBtn"),
     backToActionsBtn: byId("backToActionsBtn"),
-    backToAttackMenuBtn: byId("backToAttackMenuBtn"),
-    faceTargetBtn: byId("faceTargetBtn"),
-    frontLeftTargetBtn: byId("frontLeftTargetBtn"),
-    frontRightTargetBtn: byId("frontRightTargetBtn"),
-    sideTargetBtn: byId("sideTargetBtn"),
-    earsTargetBtn: byId("earsTargetBtn"),
-    neckTargetBtn: byId("neckTargetBtn"),
     opponentChosenBadge: byId("opponentChosenBadge")
   },
-
-  history: {
-    list: byId("myTrainingsList")
-  },
-
+  history: { list: byId("myTrainingsList") },
   publicProfiles: {
     searchInput: byId("publicProfileSearchInput"),
     searchBtn: byId("publicProfileSearchBtn"),
     list: byId("publicProfilesList"),
     details: byId("publicProfileDetails")
   },
-
   admin: {
     panel: byId("adminScreen"),
     summary: byId("adminSummary"),
     playersList: byId("adminPlayersList"),
-    charactersList: byId("adminCharactersList"),
     roomsList: byId("adminRoomsList"),
-    matchesList: byId("adminMatchesList"),
-    playerHistoryList: byId("adminPlayerHistoryList"),
-    searchInput: byId("adminCharacterSearchInput"),
-    searchBtn: byId("adminCharacterSearchBtn"),
-    refreshBtn: byId("adminRefreshBtn")
+    matchesList: byId("adminMatchesList")
   }
 };
 
@@ -298,68 +232,39 @@ const state = {
   userProfile: null,
   characters: {},
   currentRoomCode: "",
-  currentPlayerRole: null,
-  currentBattleTurnNumber: null,
   currentScreen: "auth",
   isAdmin: false,
   isBlocked: false,
-  activeTheme: THEMES.crimsonNight.id,
+  activeTheme: readThemeLocal(),
+  activeCardStyle: readCardStyleLocal(),
   expandedCharacterCards: {},
-
+  currentRoom: null,
+  roomTimerInterval: null,
+  lastRenderedLogLength: 0,
+  currentSeatId: "",
+  publicCharactersCache: [],
+  feedCache: [],
   adminUsersCache: {},
   adminRoomsCache: {},
   adminMatchesCache: {},
-  publicCharactersCache: [],
-  feedCache: [],
-
+  attackPlanDraft: {},
   toastContainer: null,
   modalRoot: null,
   modalResolver: null,
   modalSerializer: null,
-
-  roomTimerInterval: null,
-  lastRenderedLogLength: 0,
-  syncingForcedRound: false,
-  isApplyingAutoJoin: false,
-
   unsubscribeRoom: null,
-  unsubscribeUsers: null,
-  unsubscribeRooms: null,
-  unsubscribeMatches: null,
   unsubscribeFeed: null,
-
-  adminSelectedUserId: "",
-  shownRulesByRoom: {}
+  unsubscribePublicCharacters: null,
+  unsubscribeAdminUsers: null,
+  unsubscribeAdminRooms: null,
+  unsubscribeAdminMatches: null
 };
 
-/* ==========================================================================
-   УТИЛИТЫ
-   ========================================================================== */
-
-function now() {
-  return Date.now();
-}
-
-function text(node, value) {
-  if (node) node.textContent = value;
-}
-
-function html(node, value) {
-  if (node) node.innerHTML = value;
-}
-
-function show(node) {
-  if (node) node.classList.remove("hidden");
-}
-
-function hide(node) {
-  if (node) node.classList.add("hidden");
-}
-
-function disable(node, value = true) {
-  if (node) node.disabled = value;
-}
-
+function now() { return Date.now(); }
+function text(node, value) { if (node) node.textContent = value; }
+function html(node, value) { if (node) node.innerHTML = value; }
+function show(node) { if (node) node.classList.remove("hidden"); }
+function hide(node) { if (node) node.classList.add("hidden"); }
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -367,22 +272,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
-
-function randomRoll() {
-  return Math.floor(Math.random() * 100) + 1;
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function safeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function deepClone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
+function randomRoll() { return Math.floor(Math.random() * 100) + 1; }
+function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+function safeArray(value) { return Array.isArray(value) ? value : []; }
+function deepClone(value) { return JSON.parse(JSON.stringify(value)); }
 
 function formatDate(timestamp) {
   if (!timestamp) return "—";
@@ -408,12 +301,8 @@ function getMoscowDateKey(timestamp = now()) {
     day: "2-digit",
     timeZone: MOSCOW_TIMEZONE
   }).formatToParts(new Date(timestamp));
-
   const map = {};
-  parts.forEach(part => {
-    if (part.type !== "literal") map[part.type] = part.value;
-  });
-
+  parts.forEach(part => { if (part.type !== "literal") map[part.type] = part.value; });
   return `${map.year}-${map.month}-${map.day}`;
 }
 
@@ -442,67 +331,13 @@ function getInitials(name) {
   return parts.map(part => part[0]?.toUpperCase() || "").join("") || "✦";
 }
 
-function generateRoomCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < ROOM_CODE_LENGTH; i += 1) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
-
-function saveActiveRoomLocal(roomCode, role) {
-  localStorage.setItem(LOCAL_KEYS.activeRoom, JSON.stringify({ roomCode, role }));
-}
-
-function clearActiveRoomLocal() {
-  localStorage.removeItem(LOCAL_KEYS.activeRoom);
-}
-
-function readActiveRoomLocal() {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEYS.activeRoom);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveThemeLocal(themeId) {
-  localStorage.setItem(LOCAL_KEYS.theme, themeId);
-}
-
-function readThemeLocal() {
-  return localStorage.getItem(LOCAL_KEYS.theme) || THEMES.crimsonNight.id;
-}
-
-function readRulesLocal() {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEYS.readRules);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveRulesLocal(value) {
-  localStorage.setItem(LOCAL_KEYS.readRules, JSON.stringify(value || {}));
-}
-
-function markRulesReadForRoom(roomCode) {
-  if (!roomCode) return;
-  state.shownRulesByRoom[roomCode] = true;
-  const map = readRulesLocal();
-  map[roomCode] = ROOM_RULES_VERSION;
-  saveRulesLocal(map);
-}
-
-function hasReadRulesForRoom(roomCode) {
-  if (!roomCode) return false;
-  if (state.shownRulesByRoom[roomCode]) return true;
-  const map = readRulesLocal();
-  return map[roomCode] === ROOM_RULES_VERSION;
-}
+function saveThemeLocal(themeId) { localStorage.setItem(LOCAL_KEYS.theme, themeId); }
+function readThemeLocal() { return localStorage.getItem(LOCAL_KEYS.theme) || THEMES.crimsonNight.id; }
+function saveCardStyleLocal(styleId) { localStorage.setItem(LOCAL_KEYS.cardStyle, styleId); }
+function readCardStyleLocal() { return localStorage.getItem(LOCAL_KEYS.cardStyle) || CARD_STYLES.smooth.id; }
+function saveActiveRoomLocal(roomCode) { localStorage.setItem(LOCAL_KEYS.activeRoom, roomCode || ""); }
+function readActiveRoomLocal() { return localStorage.getItem(LOCAL_KEYS.activeRoom) || ""; }
+function clearActiveRoomLocal() { localStorage.removeItem(LOCAL_KEYS.activeRoom); }
 
 function applyTheme(themeId) {
   state.activeTheme = THEMES[themeId] ? themeId : THEMES.crimsonNight.id;
@@ -511,95 +346,102 @@ function applyTheme(themeId) {
   saveThemeLocal(state.activeTheme);
 }
 
+function applyCardStyle(styleId) {
+  state.activeCardStyle = CARD_STYLES[styleId] ? styleId : CARD_STYLES.smooth.id;
+  document.body.dataset.cardStyle = state.activeCardStyle;
+  if (ui.shell.cardStyleSelect) ui.shell.cardStyleSelect.value = state.activeCardStyle;
+  saveCardStyleLocal(state.activeCardStyle);
+}
+
+function renderThemeSelector() {
+  if (!ui.shell.themeSelect) return;
+  ui.shell.themeSelect.innerHTML = Object.values(THEMES).map(theme => `<option value="${theme.id}">${theme.label}</option>`).join("");
+  ui.shell.themeSelect.value = state.activeTheme;
+}
+
+function renderCardStyleSelector() {
+  if (!ui.shell.cardStyleSelect) return;
+  ui.shell.cardStyleSelect.innerHTML = Object.values(CARD_STYLES).map(style => `<option value="${style.id}">${style.label}</option>`).join("");
+  ui.shell.cardStyleSelect.value = state.activeCardStyle;
+}
+
+function generateRoomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < ROOM_CODE_LENGTH; i += 1) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function getProfilePath(uid) { return `users/${uid}/profile`; }
+function getCharactersPath(uid) { return `users/${uid}/characters`; }
+function getCharacterPath(uid, characterId) { return `${getCharactersPath(uid)}/${characterId}`; }
+function getRoomPath(roomCode) { return `rooms/${roomCode}`; }
+function getFeedPath() { return "system/trainingFeed"; }
+function getPairCooldownPath(pairKey) { return `system/pairCooldowns/${pairKey}`; }
+function getPublicCharactersPath() { return "publicCharacters"; }
+function getCurrentUserDisplayName() { return state.userProfile?.displayName || state.user?.email?.split("@")[0] || "Зенит"; }
+
 function requireAuth() {
-  if (!state.user) {
-    notifyError("Сначала войди в аккаунт.");
-    return false;
-  }
-  if (state.isBlocked) {
-    notifyError("Ваш аккаунт заблокирован.");
-    return false;
-  }
+  if (!state.user) { notifyError("Сначала войди в аккаунт."); return false; }
+  if (state.isBlocked) { notifyError("Ваш аккаунт заблокирован."); return false; }
   return true;
 }
 
-function getProfilePath(uid) {
-  return `users/${uid}/profile`;
-}
-
-function getCharactersPath(uid) {
-  return `users/${uid}/characters`;
-}
-
-function getCharacterPath(uid, characterId) {
-  return `${getCharactersPath(uid)}/${characterId}`;
-}
-
-function getRoomPath(roomCode) {
-  return `rooms/${roomCode}`;
-}
-
-function getFeedPath() {
-  return "system/trainingFeed";
-}
-
-function getPairCooldownPath(pairKey) {
-  return `system/pairCooldowns/${pairKey}`;
-}
-
-function getSelectedCharacterId() {
-  return ui.profile.activeCharacterSelect?.value || state.userProfile?.activeCharacterId || "";
-}
-
-function getCharacterById(characterId) {
-  return state.characters?.[characterId] || null;
-}
-
-function getCharacterGlobalId(uid, characterId) {
-  return `${uid}__${characterId}`;
-}
-
-function getPairKey(hostUid, hostCharacterId, guestUid, guestCharacterId) {
-  const items = [
-    getCharacterGlobalId(hostUid, hostCharacterId),
-    getCharacterGlobalId(guestUid, guestCharacterId)
-  ].sort();
-
-  return items.join("--");
-}
-
-function getOtherRole(role) {
-  return role === "host" ? "guest" : "host";
-}
-
-function getTrainingStatusLabel(status) {
-  return status === "apprentice" ? "Оруженосец" : "Воитель";
-}
-
+function getTrainingStatusLabel(status) { return status === "apprentice" ? "Оруженосец" : "Воитель"; }
 function getRoomStatusLabel(status) {
-  if (status === "waiting") return "ожидание второго игрока";
-  if (status === "ready") return "ожидание готовности";
-  if (status === "battle") return "идёт тренировка";
-  if (status === "finished") return "тренировка завершена";
+  if (status === "lobby") return "лобби";
+  if (status === "battle") return "идёт бой";
+  if (status === "finished") return "бой завершён";
   return "—";
 }
-
-/* ==========================================================================
-   TOAST + МОДАЛКИ
-   ========================================================================== */
+function getSeatBadgeClass(teamId, occupied) {
+  if (!occupied) return "seat-badge-empty";
+  if (teamId === "alpha") return "seat-badge-alpha";
+  if (teamId === "beta") return "seat-badge-beta";
+  return "seat-badge-solo";
+}
+function getTeamLabel(roomMode, teamId, seatId = "") {
+  if (roomMode === "duel" || roomMode === "teams") {
+    if (teamId === "alpha") return "Сторона А";
+    if (teamId === "beta") return "Сторона Б";
+    return "Без стороны";
+  }
+  if (!teamId || teamId === "solo") return "Сам за себя";
+  if (teamId.startsWith("solo-")) return "Сам за себя";
+  return seatId ? `Сольник ${seatId.replace("seat", "#")}` : "Сам за себя";
+}
+function getSeatIds() { return ["seat1","seat2","seat3","seat4","seat5","seat6"]; }
+function getPairKeyForCharacters(aUid, aCharId, bUid, bCharId) { return [`${aUid}__${aCharId}`, `${bUid}__${bCharId}`].sort().join("--"); }
+function getSelectedCharacterId() { return ui.profile.activeCharacterSelect?.value || state.userProfile?.activeCharacterId || ""; }
+function getCharacterById(characterId) { return state.characters?.[characterId] || null; }
+function getSelectedCharacterPayload() {
+  const characterId = getSelectedCharacterId();
+  const character = getCharacterById(characterId);
+  if (!characterId || !character) return null;
+  return { characterId, character: normalizeCharacter(character) };
+}
+function findMySeatId(room) {
+  if (!state.user || !room?.seats) return "";
+  return getSeatIds().find(seatId => room.seats?.[seatId]?.uid === state.user.uid) || "";
+}
+function getOccupiedSeats(room) {
+  return getSeatIds().map(seatId => ({ seatId, ...(room?.seats?.[seatId] || {}) })).filter(item => Boolean(item.uid));
+}
+function getIncludedSeats(room) { return getOccupiedSeats(room).filter(item => item.included !== false); }
+function getLivingParticipants(battle) {
+  return Object.entries(battle?.participants || {}).filter(([, item]) => item && !item.defeated && !item.escaped && item.hp > 0).map(([seatId, item]) => ({ seatId, ...item }));
+}
+function isParticipantAlive(p) { return p && !p.defeated && !p.escaped && p.hp > 0; }
 
 function ensureUiChrome() {
   if (!state.toastContainer) {
     const container = document.createElement("div");
-    container.id = "zenithToastContainer";
     container.className = "zenith-toast-container";
     document.body.appendChild(container);
     state.toastContainer = container;
   }
-
   if (!state.modalRoot) {
     const root = document.createElement("div");
-    root.id = "zenithModalRoot";
     root.className = "zenith-modal-root hidden";
     root.innerHTML = `
       <div class="zenith-modal-backdrop"></div>
@@ -633,16 +475,11 @@ function ensureUiChrome() {
       if (root.dataset.allowClose === "false") return;
       resolveModal({ confirmed: false, value: null });
     });
-
     root.querySelector(".zenith-modal-backdrop")?.addEventListener("click", () => {
       if (root.dataset.allowClose === "false") return;
       resolveModal({ confirmed: false, value: null });
     });
-
-    byId("zenithModalCancel")?.addEventListener("click", () => {
-      resolveModal({ confirmed: false, value: null });
-    });
-
+    byId("zenithModalCancel")?.addEventListener("click", () => resolveModal({ confirmed: false, value: null }));
     byId("zenithModalConfirm")?.addEventListener("click", () => {
       const serializer = state.modalSerializer;
       const value = typeof serializer === "function" ? serializer(root) : true;
@@ -653,34 +490,16 @@ function ensureUiChrome() {
 
 function toast(message, variant = "default") {
   ensureUiChrome();
-
   const item = document.createElement("div");
   item.className = `zenith-toast zenith-toast-${variant}`;
-  item.innerHTML = `
-    <div class="zenith-toast-mark">✦</div>
-    <div class="zenith-toast-text">${escapeHtml(message)}</div>
-  `;
-
+  item.innerHTML = `<div class="zenith-toast-mark">✦</div><div class="zenith-toast-text">${escapeHtml(message)}</div>`;
   state.toastContainer.appendChild(item);
   setTimeout(() => item.classList.add("zenith-toast-visible"), 10);
-
-  setTimeout(() => {
-    item.classList.remove("zenith-toast-visible");
-    setTimeout(() => item.remove(), 250);
-  }, 2600);
-
-  if (variant === "default") {
-    text(ui.shell.globalNotice, message);
-  }
+  setTimeout(() => { item.classList.remove("zenith-toast-visible"); setTimeout(() => item.remove(), 250); }, 2600);
+  if (variant === "default") text(ui.shell.globalNotice, message);
 }
-
-function notify(message) {
-  toast(message, "default");
-}
-
-function notifyError(message) {
-  toast(message, "danger");
-}
+function notify(message) { toast(message, "default"); }
+function notifyError(message) { toast(message, "danger"); }
 
 async function openModal({
   title = "Окно",
@@ -693,77 +512,31 @@ async function openModal({
   serializer = null
 }) {
   ensureUiChrome();
-
   text(byId("zenithModalTitle"), title);
   text(byId("zenithModalText"), bodyText);
   html(byId("zenithModalBody"), bodyHtml);
   text(byId("zenithModalConfirm"), confirmLabel);
   text(byId("zenithModalCancel"), cancelLabel);
-
   byId("zenithModalCancel").style.display = showCancel ? "" : "none";
   byId("zenithModalClose").style.display = allowClose ? "" : "none";
   state.modalRoot.dataset.allowClose = allowClose ? "true" : "false";
-
   state.modalSerializer = serializer;
   show(state.modalRoot);
-
-  return new Promise(resolve => {
-    state.modalResolver = resolve;
-  });
+  return new Promise(resolve => { state.modalResolver = resolve; });
 }
 
-async function openConfirmModal({
-  title,
-  text: bodyText,
-  confirmLabel = "Подтвердить",
-  cancelLabel = "Отмена"
-}) {
-  const result = await openModal({
-    title,
-    text: bodyText,
-    confirmLabel,
-    cancelLabel,
-    showCancel: true,
-    allowClose: true
-  });
-
+async function openConfirmModal({ title, text: bodyText, confirmLabel = "Подтвердить", cancelLabel = "Отмена" }) {
+  const result = await openModal({ title, text: bodyText, confirmLabel, cancelLabel, showCancel: true, allowClose: true });
   return result.confirmed;
 }
 
-async function openInfoModal({
-  title,
-  text: bodyText = "",
-  bodyHtml = "",
-  confirmLabel = "Я понял",
-  allowClose = false
-}) {
-  const result = await openModal({
-    title,
-    text: bodyText,
-    bodyHtml,
-    confirmLabel,
-    cancelLabel: "",
-    showCancel: false,
-    allowClose
-  });
-
-  return result.confirmed;
-}
-
-async function openChoiceModal({
-  title,
-  text: bodyText = "",
-  choices = [],
-  confirmLabel = "Выбрать",
-  cancelLabel = "Отмена"
-}) {
+async function openChoiceModal({ title, text: bodyText = "", choices = [], confirmLabel = "Выбрать", cancelLabel = "Отмена" }) {
   const bodyHtml = choices.map((choice, index) => `
     <label class="zenith-choice-item">
-      <input type="radio" name="zenithModalChoice" value="${escapeHtml(choice.value)}" ${index === 0 ? "checked" : ""} />
+      <input type="radio" name="zenithChoice" value="${escapeHtml(choice.value)}" ${index === 0 ? "checked" : ""} />
       <span>${escapeHtml(choice.label)}</span>
     </label>
   `).join("");
-
   const result = await openModal({
     title,
     text: bodyText,
@@ -772,15 +545,13 @@ async function openChoiceModal({
     cancelLabel,
     showCancel: true,
     allowClose: true,
-    serializer: root => root.querySelector("input[name='zenithModalChoice']:checked")?.value || null
+    serializer: root => root.querySelector("input[name='zenithChoice']:checked")?.value || null
   });
-
   return result.confirmed ? result.value : null;
 }
 
 async function openCharacterEditModal(character) {
   const current = normalizeCharacter(character);
-
   const result = await openModal({
     title: "Редактирование персонажа",
     text: "Измени имя и племя персонажа.",
@@ -788,187 +559,29 @@ async function openCharacterEditModal(character) {
       <div class="zenith-input-stack">
         <label class="zenith-input-label">
           <span>Имя</span>
-          <input id="zenithModalCharName" type="text" value="${escapeHtml(current.name || "")}" />
+          <input id="zenithModalCharName" type="text" value="${escapeHtml(current.name || "")}" class="field-input" />
         </label>
         <label class="zenith-input-label">
           <span>Племя</span>
-          <input id="zenithModalCharClan" type="text" value="${escapeHtml(current.clan || "")}" />
+          <input id="zenithModalCharClan" type="text" value="${escapeHtml(current.clan || "")}" class="field-input" />
         </label>
       </div>
     `,
     confirmLabel: "Сохранить",
     cancelLabel: "Отмена",
-    showCancel: true,
-    allowClose: true,
     serializer: () => ({
       name: byId("zenithModalCharName")?.value.trim() || "",
       clan: byId("zenithModalCharClan")?.value.trim() || ""
     })
   });
-
   return result.confirmed ? result.value : null;
 }
 
-/* ==========================================================================
-   ТЕКСТ ПРАВИЛ ДЛЯ КОМНАТЫ
-   ========================================================================== */
 
-function getRoomRulesHtml() {
-  return `
-    <div class="room-rules-sheet">
-      <div class="room-rules-section">
-        <div class="room-rules-title">Зачёт получат оба, если:</div>
-        <ul>
-          <li>в тренировке участвуют два воителя;</li>
-          <li>в тренировке участвуют два оруженосца;</li>
-          <li>тренировка завершена корректно;</li>
-          <li>у персонажей нет ограничений на зачёт.</li>
-        </ul>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Зачёт получит только оруженосец, если:</div>
-        <ul>
-          <li>в тренировке участвуют воитель и оруженосец;</li>
-          <li>тренировка завершена корректно;</li>
-          <li>у оруженосца нет ограничений на зачёт.</li>
-        </ul>
-        <div class="room-rules-note">Воитель в такой тренировке зачёт не получает.</div>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Зачёта не будет, если:</div>
-        <ul>
-          <li>персонаж уже получил зачёт сегодня;</li>
-          <li>эта же пара персонажей уже недавно получала зачёт;</li>
-          <li>тренировка не была завершена.</li>
-        </ul>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Откат пары</div>
-        <div class="room-rules-note">
-          После завершённой тренировки эта же пара персонажей уходит на откат на 3 дня.
-          До конца отката они могут снова тренироваться друг с другом, но без зачёта.
-        </div>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Пороги улучшений для воителей</div>
-        <ul>
-          <li>3 засчитанные победы дают 1 улучшение;</li>
-          <li>5 засчитанных поражений дают 1 улучшение.</li>
-        </ul>
-        <div class="room-rules-note">Лишний прогресс не сгорает и сохраняется дальше.</div>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Пороги улучшений для оруженосцев</div>
-        <ul>
-          <li>5 засчитанных побед дают 1 улучшение;</li>
-          <li>7 засчитанных поражений дают 1 улучшение.</li>
-        </ul>
-        <div class="room-rules-note">Лишний прогресс не сгорает и сохраняется дальше.</div>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Персонаж может получить такие усиления:</div>
-        <ul>
-          <li>шанс попадания +10%;</li>
-          <li>шанс уворота +10%;</li>
-          <li>сила удара когтями +5%;</li>
-          <li>сила укуса +5%.</li>
-        </ul>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Лимиты улучшений</div>
-        <ul>
-          <li>шанс попадания можно улучшить до 5 раз;</li>
-          <li>шанс уворота можно улучшить до 5 раз;</li>
-          <li>силу удара когтями можно улучшить до 5 раз;</li>
-          <li>силу укуса можно улучшить до 5 раз.</li>
-        </ul>
-      </div>
-
-      <div class="room-rules-section">
-        <div class="room-rules-title">Посвящение оруженосца</div>
-        <div class="room-rules-note">
-          После посвящения в воители можно перенести только часть ученических улучшений:
-        </div>
-        <ul>
-          <li>если у оруженосца 1–2 улучшения, переносится 1;</li>
-          <li>если у оруженосца 3–4 улучшения, переносится 2;</li>
-          <li>если у оруженосца 5 и больше улучшений, переносится 3.</li>
-        </ul>
-        <div class="room-rules-note">Какие именно улучшения сохранить, выбирает владелец персонажа.</div>
-      </div>
-    </div>
-  `;
-}
-
-/* ==========================================================================
-   МОДЕЛИ ДАННЫХ
-   ========================================================================== */
-
-function createDefaultEffects() {
-  return {
-    stunTurns: 0,
-    accuracyPenaltyTurns: 0,
-    dotDamage: 0,
-    pendingDotDamage: 0,
-    dodgesLeft: MAX_DODGES
-  };
-}
-
-function createEmptySelections() {
-  return { host: null, guest: null };
-}
-
-function createEmptyReadyState() {
-  return {
-    host: false,
-    guest: false,
-    hostAt: 0,
-    guestAt: 0
-  };
-}
-
-function createDefaultCombatBase() {
-  return {
-    accuracy: 0,
-    dodge: 0,
-    clawPower: 0,
-    bitePower: 0
-  };
-}
-
-function createDefaultFavoriteCounters() {
-  return {
-    sand: 0,
-    paw: 0,
-    trip: 0
-  };
-}
-
-function createDefaultTargetCounters() {
-  return {
-    face: 0,
-    frontLeft: 0,
-    frontRight: 0,
-    side: 0,
-    ears: 0,
-    neck: 0
-  };
-}
-
-function createDefaultAccuracyStats() {
-  return {
-    totalAttacks: 0,
-    hits: 0,
-    misses: 0
-  };
-}
+function createDefaultCombatBase() { return { accuracy: 0, dodge: 0, clawPower: 0, bitePower: 0 }; }
+function createDefaultFavoriteCounters() { return { sand: 0, paw: 0, trip: 0 }; }
+function createDefaultTargetCounters() { return { face: 0, frontLeft: 0, frontRight: 0, side: 0, ears: 0, neck: 0 }; }
+function createDefaultAccuracyStats() { return { totalAttacks: 0, hits: 0, misses: 0 }; }
 
 function createDefaultTrainingProgress() {
   return {
@@ -1036,156 +649,260 @@ function createDefaultProfile(displayName = "Зенит") {
     activeCharacterId: "",
     blocked: false,
     themeId: readThemeLocal(),
+    cardStyleId: readCardStyleLocal(),
     createdAt: now(),
     updatedAt: now()
   };
 }
 
-/* ==========================================================================
-   НОРМАЛИЗАЦИЯ
-   ========================================================================== */
-
-function normalizeEffects(raw) {
+function normalizeCharacter(raw) {
+  const c = raw || {};
   return {
-    stunTurns: raw?.stunTurns ?? 0,
-    accuracyPenaltyTurns: raw?.accuracyPenaltyTurns ?? 0,
-    dotDamage: raw?.dotDamage ?? 0,
-    pendingDotDamage: raw?.pendingDotDamage ?? 0,
-    dodgesLeft: raw?.dodgesLeft ?? MAX_DODGES
-  };
-}
-
-function normalizeSelection(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  return {
-    type: raw.type || null,
-    targetKey: raw.targetKey || null,
-    attackRoll: raw.attackRoll ?? null,
-    dodgeRoll: raw.dodgeRoll ?? null
-  };
-}
-
-function normalizeReadyState(raw) {
-  return {
-    host: Boolean(raw?.host),
-    guest: Boolean(raw?.guest),
-    hostAt: raw?.hostAt ?? 0,
-    guestAt: raw?.guestAt ?? 0
-  };
-}
-
-function normalizeCombatBase(raw) {
-  const base = createDefaultCombatBase();
-  return {
-    accuracy: raw?.accuracy ?? base.accuracy,
-    dodge: raw?.dodge ?? base.dodge,
-    clawPower: raw?.clawPower ?? base.clawPower,
-    bitePower: raw?.bitePower ?? base.bitePower
-  };
-}
-
-function normalizeTrainingProgress(raw) {
-  const base = createDefaultTrainingProgress();
-  return {
-    winsTowardUpgrade: raw?.winsTowardUpgrade ?? base.winsTowardUpgrade,
-    lossesTowardUpgrade: raw?.lossesTowardUpgrade ?? base.lossesTowardUpgrade,
-    pendingUpgradePoints: raw?.pendingUpgradePoints ?? base.pendingUpgradePoints,
-    lastCreditedAt: raw?.lastCreditedAt ?? base.lastCreditedAt,
-    lastCreditedDateKey: raw?.lastCreditedDateKey ?? base.lastCreditedDateKey,
-    lastCreditedOpponentName: raw?.lastCreditedOpponentName ?? base.lastCreditedOpponentName,
-    lastCreditedReason: raw?.lastCreditedReason ?? base.lastCreditedReason,
-    creditedTrainings: raw?.creditedTrainings ?? base.creditedTrainings,
-    creditedWins: raw?.creditedWins ?? base.creditedWins,
-    creditedLosses: raw?.creditedLosses ?? base.creditedLosses,
-    creditedDraws: raw?.creditedDraws ?? base.creditedDraws,
-    unfinishedTrainings: raw?.unfinishedTrainings ?? base.unfinishedTrainings,
-    deniedTrainings: raw?.deniedTrainings ?? base.deniedTrainings
-  };
-}
-
-function normalizeTrainingProfile(raw) {
-  const base = createDefaultTrainingProfile();
-  return {
-    progress: normalizeTrainingProgress(raw?.progress),
-    warriorUpgrades: safeArray(raw?.warriorUpgrades),
-    apprenticeUpgrades: safeArray(raw?.apprenticeUpgrades),
-    upgradeHistory: safeArray(raw?.upgradeHistory),
-    analytics: {
-      favoriteMoveCounters: {
-        ...createDefaultFavoriteCounters(),
-        ...(raw?.analytics?.favoriteMoveCounters || {})
+    name: c.name || "Без имени",
+    clan: c.clan || "",
+    trainingStatus: c.trainingStatus || "warrior",
+    ownerNote: c.ownerNote || "",
+    combatBase: {
+      accuracy: c.combatBase?.accuracy ?? 0,
+      dodge: c.combatBase?.dodge ?? 0,
+      clawPower: c.combatBase?.clawPower ?? 0,
+      bitePower: c.combatBase?.bitePower ?? 0
+    },
+    profileStats: {
+      wins: c.profileStats?.wins ?? 0,
+      losses: c.profileStats?.losses ?? 0,
+      draws: c.profileStats?.draws ?? 0,
+      lastBattleAt: c.profileStats?.lastBattleAt ?? 0,
+      lastOpponentName: c.profileStats?.lastOpponentName ?? ""
+    },
+    training: {
+      progress: {
+        ...createDefaultTrainingProgress(),
+        ...(c.training?.progress || {})
       },
-      accuracy: {
-        ...createDefaultAccuracyStats(),
-        ...(raw?.analytics?.accuracy || {})
+      warriorUpgrades: safeArray(c.training?.warriorUpgrades),
+      apprenticeUpgrades: safeArray(c.training?.apprenticeUpgrades),
+      upgradeHistory: safeArray(c.training?.upgradeHistory),
+      analytics: {
+        favoriteMoveCounters: {
+          ...createDefaultFavoriteCounters(),
+          ...(c.training?.analytics?.favoriteMoveCounters || {})
+        },
+        accuracy: {
+          ...createDefaultAccuracyStats(),
+          ...(c.training?.analytics?.accuracy || {})
+        },
+        targets: {
+          ...createDefaultTargetCounters(),
+          ...(c.training?.analytics?.targets || {})
+        }
       },
-      targets: {
-        ...createDefaultTargetCounters(),
-        ...(raw?.analytics?.targets || {})
+      promotion: {
+        canTransferNow: Boolean(c.training?.promotion?.canTransferNow),
+        transferredAt: c.training?.promotion?.transferredAt ?? 0,
+        transferredCount: c.training?.promotion?.transferredCount ?? 0,
+        lastTransferSummary: c.training?.promotion?.lastTransferSummary ?? ""
       }
     },
-    promotion: {
-      canTransferNow: Boolean(raw?.promotion?.canTransferNow),
-      transferredAt: raw?.promotion?.transferredAt ?? base.promotion.transferredAt,
-      transferredCount: raw?.promotion?.transferredCount ?? base.promotion.transferredCount,
-      lastTransferSummary: raw?.promotion?.lastTransferSummary ?? base.promotion.lastTransferSummary
+    createdAt: c.createdAt ?? now(),
+    updatedAt: c.updatedAt ?? now()
+  };
+}
+
+function createEmptySeat(seatId) {
+  return {
+    seatId,
+    uid: "",
+    profileName: "",
+    characterId: "",
+    characterName: "",
+    clan: "",
+    trainingStatus: "",
+    included: false,
+    ready: false,
+    readyAt: 0,
+    teamId: "alpha",
+    joinedAt: 0
+  };
+}
+
+function createDefaultSeats() {
+  return Object.fromEntries(getSeatIds().map(seatId => [seatId, createEmptySeat(seatId)]));
+}
+
+function normalizeSeat(raw, seatId) {
+  return {
+    ...createEmptySeat(seatId),
+    ...(raw || {}),
+    seatId
+  };
+}
+
+function createDefaultRoom(mode = "duel", creatorPayload = null, roomCode = "") {
+  const seats = createDefaultSeats();
+  if (creatorPayload) {
+    seats.seat1 = {
+      seatId: "seat1",
+      uid: creatorPayload.uid,
+      profileName: creatorPayload.profileName,
+      characterId: creatorPayload.characterId,
+      characterName: creatorPayload.characterName,
+      clan: creatorPayload.clan,
+      trainingStatus: creatorPayload.trainingStatus,
+      included: true,
+      ready: false,
+      readyAt: 0,
+      teamId: mode === "ffa" ? "solo-seat1" : "alpha",
+      joinedAt: now()
+    };
+  }
+  return {
+    code: roomCode,
+    createdAt: now(),
+    createdBy: creatorPayload?.uid || "",
+    settings: { mode, roomName: "", allowUpToSix: true },
+    status: "lobby",
+    seats,
+    battle: null,
+    result: null
+  };
+}
+
+function normalizeRoom(raw, code = "") {
+  const room = raw || {};
+  const mode = room.settings?.mode || "duel";
+  const seats = createDefaultSeats();
+  getSeatIds().forEach(seatId => {
+    seats[seatId] = normalizeSeat(room.seats?.[seatId], seatId);
+  });
+
+  return {
+    code: room.code || code,
+    createdAt: room.createdAt || 0,
+    createdBy: room.createdBy || "",
+    settings: {
+      mode,
+      roomName: room.settings?.roomName || "",
+      allowUpToSix: room.settings?.allowUpToSix !== false
+    },
+    status: room.status || "lobby",
+    seats,
+    battle: room.battle ? normalizeBattle(room.battle, mode) : null,
+    result: room.result || null
+  };
+}
+
+function createDefaultEffects() {
+  return {
+    stunTurns: 0,
+    accuracyPenaltyTurns: 0,
+    dotDamage: 0,
+    pendingDotDamage: 0,
+    dodgesLeft: MAX_DODGES
+  };
+}
+
+function createBattleParticipantFromSeat(seat) {
+  return {
+    uid: seat.uid,
+    profileName: seat.profileName,
+    characterId: seat.characterId,
+    name: seat.characterName,
+    clan: seat.clan,
+    trainingStatus: seat.trainingStatus,
+    teamId: seat.teamId,
+    hp: 100,
+    defeated: false,
+    escaped: false,
+    effects: createDefaultEffects(),
+    analytics: {
+      favoriteMoveCounters: createDefaultFavoriteCounters(),
+      accuracy: createDefaultAccuracyStats(),
+      targets: createDefaultTargetCounters()
     }
   };
 }
 
-function normalizeCharacter(raw) {
-  const character = raw || {};
+function createBattleState(room) {
+  const included = getIncludedSeats(room);
+  const participants = {};
+  included.forEach(seat => { participants[seat.seatId] = createBattleParticipantFromSeat(seat); });
+
   return {
-    name: character.name || "Без имени",
-    clan: character.clan || "",
-    trainingStatus: character.trainingStatus || "warrior",
-    ownerNote: character.ownerNote || "",
-    combatBase: normalizeCombatBase(character.combatBase),
-    profileStats: {
-      wins: character.profileStats?.wins ?? 0,
-      losses: character.profileStats?.losses ?? 0,
-      draws: character.profileStats?.draws ?? 0,
-      lastBattleAt: character.profileStats?.lastBattleAt ?? 0,
-      lastOpponentName: character.profileStats?.lastOpponentName ?? ""
-    },
-    training: normalizeTrainingProfile(character.training),
-    createdAt: character.createdAt ?? now(),
-    updatedAt: character.updatedAt ?? now()
+    roomMode: room.settings.mode,
+    round: 1,
+    participants,
+    submissions: {},
+    lastMessage: "Схватка началась. Выберите действия на первый ход.",
+    log: [{ id: `start_${now()}`, round: 0, text: "Схватка началась.", kind: "system", createdAt: now() }],
+    startedAt: now(),
+    updatedAt: now(),
+    timeoutAt: now() + INACTIVITY_TIMEOUT_MS,
+    winnerTeamId: "",
+    winnerSeatId: "",
+    finished: false
   };
 }
 
-/* ==========================================================================
-   ЛОГИКА УЛУЧШЕНИЙ
-   ========================================================================== */
+function normalizeBattle(battle, roomMode = "duel") {
+  const participants = {};
+  Object.entries(battle?.participants || {}).forEach(([seatId, item]) => {
+    participants[seatId] = {
+      uid: item.uid || "",
+      profileName: item.profileName || "",
+      characterId: item.characterId || "",
+      name: item.name || "Без имени",
+      clan: item.clan || "",
+      trainingStatus: item.trainingStatus || "warrior",
+      teamId: item.teamId || (roomMode === "ffa" ? `solo-${seatId}` : "alpha"),
+      hp: item.hp ?? 100,
+      defeated: Boolean(item.defeated),
+      escaped: Boolean(item.escaped),
+      effects: { ...createDefaultEffects(), ...(item.effects || {}) },
+      analytics: {
+        favoriteMoveCounters: { ...createDefaultFavoriteCounters(), ...(item.analytics?.favoriteMoveCounters || {}) },
+        accuracy: { ...createDefaultAccuracyStats(), ...(item.analytics?.accuracy || {}) },
+        targets: { ...createDefaultTargetCounters(), ...(item.analytics?.targets || {}) }
+      }
+    };
+  });
 
-function getThresholdsForStatus(status) {
-  return status === "apprentice"
-    ? TRAINING_THRESHOLDS.apprentice
-    : TRAINING_THRESHOLDS.warrior;
+  return {
+    roomMode,
+    round: battle?.round ?? 1,
+    participants,
+    submissions: battle?.submissions || {},
+    lastMessage: battle?.lastMessage || "Схватка идёт.",
+    log: safeArray(battle?.log),
+    startedAt: battle?.startedAt ?? now(),
+    updatedAt: battle?.updatedAt ?? now(),
+    timeoutAt: battle?.timeoutAt ?? (now() + INACTIVITY_TIMEOUT_MS),
+    winnerTeamId: battle?.winnerTeamId || "",
+    winnerSeatId: battle?.winnerSeatId || "",
+    finished: Boolean(battle?.finished)
+  };
 }
 
+function getThresholdsForStatus(status) {
+  return status === "apprentice" ? TRAINING_THRESHOLDS.apprentice : TRAINING_THRESHOLDS.warrior;
+}
 function getPromotionTransferLimit(upgradeCount) {
   if (upgradeCount <= 0) return 0;
   if (upgradeCount <= 2) return 1;
   if (upgradeCount <= 4) return 2;
   return 3;
 }
-
 function getBranchKeyForCharacter(character) {
   const normalized = normalizeCharacter(character);
   return normalized.trainingStatus === "apprentice" ? "apprenticeUpgrades" : "warriorUpgrades";
 }
-
 function getCurrentUpgradePool(character) {
   const normalized = normalizeCharacter(character);
-  const key = getBranchKeyForCharacter(normalized);
-  return safeArray(normalized.training[key]);
+  return safeArray(normalized.training[getBranchKeyForCharacter(normalized)]);
 }
-
 function getUpgradeCountByType(upgrades, type) {
   return safeArray(upgrades).filter(item => item.type === type).length;
 }
-
 function getUpgradeDistributionFromPool(upgrades) {
   return {
     accuracy: getUpgradeCountByType(upgrades, "accuracy") * UPGRADE_DEFINITIONS.accuracy.increment,
@@ -1194,108 +911,65 @@ function getUpgradeDistributionFromPool(upgrades) {
     bitePower: getUpgradeCountByType(upgrades, "bitePower") * UPGRADE_DEFINITIONS.bitePower.increment
   };
 }
-
 function getCombatViewTotals(character) {
   const normalized = normalizeCharacter(character);
-  const pool = getCurrentUpgradePool(normalized);
-  const bonus = getUpgradeDistributionFromPool(pool);
-
+  const bonus = getUpgradeDistributionFromPool(getCurrentUpgradePool(normalized));
   return {
     accuracy: normalized.combatBase.accuracy + bonus.accuracy,
     dodge: normalized.combatBase.dodge + bonus.dodge,
     clawPower: normalized.combatBase.clawPower + bonus.clawPower,
-    bitePower: normalized.combatBase.bitePower + bonus.bitePower,
-    bonus
+    bitePower: normalized.combatBase.bitePower + bonus.bitePower
   };
 }
-
 function getRemainingUpgradeSlotsByType(character, type) {
   const definition = UPGRADE_DEFINITIONS[type];
   if (!definition) return 0;
-
-  const pool = getCurrentUpgradePool(character);
-  const count = getUpgradeCountByType(pool, type);
+  const count = getUpgradeCountByType(getCurrentUpgradePool(character), type);
   return Math.max(0, definition.maxCount - count);
 }
-
 function getRemainingUpgradeSlotsTotal(character) {
-  return Object.keys(UPGRADE_DEFINITIONS)
-    .reduce((sum, type) => sum + getRemainingUpgradeSlotsByType(character, type), 0);
+  return Object.keys(UPGRADE_DEFINITIONS).reduce((sum, type) => sum + getRemainingUpgradeSlotsByType(character, type), 0);
 }
-
-function canEarnAnyMoreUpgrades(character) {
-  return getRemainingUpgradeSlotsTotal(character) > 0;
-}
-
+function canEarnAnyMoreUpgrades(character) { return getRemainingUpgradeSlotsTotal(character) > 0; }
 function canAddUpgradeOfType(character, type) {
   const definition = UPGRADE_DEFINITIONS[type];
   if (!definition) return false;
-
   const normalized = normalizeCharacter(character);
   const pool = getCurrentUpgradePool(normalized);
   const currentCount = getUpgradeCountByType(pool, type);
   if (currentCount >= definition.maxCount) return false;
-
   const totals = getCombatViewTotals(normalized);
   const nextValue = totals[type] + definition.increment;
   return nextValue <= definition.cap;
 }
-
 function createUpgradeRecord(type, sourceStatus, matchId = "") {
   const definition = UPGRADE_DEFINITIONS[type];
-  return {
-    id: `${type}_${Math.random().toString(36).slice(2, 9)}`,
-    type,
-    label: definition.label,
-    value: definition.increment,
-    sourceStatus,
-    matchId,
-    createdAt: now()
-  };
+  return { id: `${type}_${Math.random().toString(36).slice(2, 9)}`, type, label: definition.label, value: definition.increment, sourceStatus, matchId, createdAt: now() };
 }
-
-function getPendingChoiceCount(character) {
-  return normalizeCharacter(character).training.progress.pendingUpgradePoints || 0;
-}
-
+function getPendingChoiceCount(character) { return normalizeCharacter(character).training.progress.pendingUpgradePoints || 0; }
 function addPendingUpgradePoints(character, count = 1) {
-  const normalized = normalizeCharacter(character);
-  const next = deepClone(normalized);
+  const next = deepClone(normalizeCharacter(character));
   const allowed = Math.min(count, getRemainingUpgradeSlotsTotal(next));
-
   next.training.progress.pendingUpgradePoints += allowed;
   next.updatedAt = now();
   return next;
 }
-
 function consumePendingUpgradePoint(character) {
-  const normalized = normalizeCharacter(character);
-  const next = deepClone(normalized);
+  const next = deepClone(normalizeCharacter(character));
   next.training.progress.pendingUpgradePoints = Math.max(0, next.training.progress.pendingUpgradePoints - 1);
   next.updatedAt = now();
   return next;
 }
-
 function addUpgradeToCurrentPool(character, type, matchId = "") {
   const normalized = normalizeCharacter(character);
   const next = consumePendingUpgradePoint(normalized);
   const key = getBranchKeyForCharacter(next);
   const record = createUpgradeRecord(type, next.trainingStatus, matchId);
-
   next.training[key].push(record);
-  next.training.upgradeHistory.unshift({
-    id: `upgrade_history_${Math.random().toString(36).slice(2, 9)}`,
-    action: "earned_upgrade",
-    label: record.label,
-    type,
-    createdAt: now(),
-    matchId
-  });
-
+  next.training.upgradeHistory.unshift({ id: `history_${Math.random().toString(36).slice(2, 9)}`, action: "earned_upgrade", label: record.label, type, createdAt: now(), matchId });
   next.updatedAt = now();
   return next;
 }
-
 function getFavoriteMoveLabel(character) {
   const counters = normalizeCharacter(character).training.analytics.favoriteMoveCounters;
   const sorted = Object.entries(counters).sort((a, b) => b[1] - a[1]);
@@ -1303,243 +977,203 @@ function getFavoriteMoveLabel(character) {
   if (!topKey || topValue <= 0) return "—";
   if (topKey === "sand") return "Песок в глаза";
   if (topKey === "paw") return "Удар лапой";
-  if (topKey === "trip") return "Подсечка";
-  return "—";
+  return "Подсечка";
 }
-
 function getAccuracyPercent(character) {
   const stats = normalizeCharacter(character).training.analytics.accuracy;
   if (!stats.totalAttacks) return 0;
   return Math.round((stats.hits / stats.totalAttacks) * 100);
 }
 
-/* ==========================================================================
-   ПРОФИЛЬ И ПЕРСОНАЖИ
-   ========================================================================== */
-
-async function pushFeedEntry(payload) {
-  const feedRef = push(ref(db, getFeedPath()));
-  await set(feedRef, payload);
-}
-
 async function loadUserProfile(uid) {
   const snapshot = await get(ref(db, getProfilePath(uid)));
   return snapshot.exists() ? snapshot.val() : null;
 }
-
 async function ensureOwnProfile(user, fallbackName = "") {
   const profileRef = ref(db, getProfilePath(user.uid));
   const snapshot = await get(profileRef);
-
-  if (snapshot.exists()) {
-    return snapshot.val();
-  }
-
+  if (snapshot.exists()) return snapshot.val();
   const baseName = fallbackName || user.email?.split("@")[0] || "Зенит";
   const profile = createDefaultProfile(baseName);
   await set(profileRef, profile);
   return profile;
 }
-
 async function loadOwnCharacters() {
   if (!state.user) return {};
-
   const snapshot = await get(ref(db, getCharactersPath(state.user.uid)));
   const value = snapshot.exists() ? snapshot.val() : {};
-
-  state.characters = Object.fromEntries(
-    Object.entries(value).map(([id, character]) => [id, normalizeCharacter(character)])
-  );
-
+  state.characters = Object.fromEntries(Object.entries(value).map(([id, character]) => [id, normalizeCharacter(character)]));
   return state.characters;
 }
-
 function getSortedCharacters(source = state.characters) {
-  return Object.entries(source || {})
-    .map(([id, value]) => ({ id, ...normalizeCharacter(value) }))
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
+  return Object.entries(source || {}).map(([id, value]) => ({ id, ...normalizeCharacter(value) })).sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
 }
+async function pushFeedEntry(payload) {
+  const feedRef = push(ref(db, getFeedPath()));
+  await set(feedRef, payload);
+}
+function cleanupRoomWatcher() {
+  if (typeof state.unsubscribeRoom === "function") {
+    state.unsubscribeRoom();
+    state.unsubscribeRoom = null;
+  }
+}
+function cleanupExternalWatchers() {
+  if (typeof state.unsubscribeFeed === "function") { state.unsubscribeFeed(); state.unsubscribeFeed = null; }
+  if (typeof state.unsubscribePublicCharacters === "function") { state.unsubscribePublicCharacters(); state.unsubscribePublicCharacters = null; }
+  if (typeof state.unsubscribeAdminUsers === "function") { state.unsubscribeAdminUsers(); state.unsubscribeAdminUsers = null; }
+  if (typeof state.unsubscribeAdminRooms === "function") { state.unsubscribeAdminRooms(); state.unsubscribeAdminRooms = null; }
+  if (typeof state.unsubscribeAdminMatches === "function") { state.unsubscribeAdminMatches(); state.unsubscribeAdminMatches = null; }
+}
+
+async function syncPublicCharacter(uid, characterId) {
+  const character = getCharacterById(characterId);
+  if (!character) return;
+  await update(ref(db, `${getPublicCharactersPath()}/${uid}__${characterId}`), {
+    uid,
+    characterId,
+    ownerName: getCurrentUserDisplayName(),
+    name: character.name,
+    clan: character.clan,
+    trainingStatus: character.trainingStatus,
+    updatedAt: now(),
+    ownerNote: character.ownerNote,
+    profileStats: character.profileStats,
+    training: character.training
+  });
+}
+async function removePublicCharacter(uid, characterId) { await remove(ref(db, `${getPublicCharactersPath()}/${uid}__${characterId}`)); }
 
 async function saveProfileStatus() {
   if (!requireAuth()) return;
-
-  const current = state.userProfile || {};
-  const displayName = current.displayName || state.user.email?.split("@")[0] || "Зенит";
   const statusValue = ui.profile.statusInput?.value.trim() || "";
-
   await update(ref(db, getProfilePath(state.user.uid)), {
-    displayName,
+    displayName: state.userProfile?.displayName || getCurrentUserDisplayName(),
     status: statusValue || "✦ Наблюдает за бабочками",
     updatedAt: now()
   });
-
   state.userProfile = await loadUserProfile(state.user.uid);
   notify("Профиль обновлён.");
+  renderAll();
 }
 
 async function savePortraitSymbol() {
   if (!requireAuth()) return;
-
   const symbol = ui.profile.symbolSelect?.value || "✦";
-
-  await update(ref(db, getProfilePath(state.user.uid)), {
-    portraitSymbol: symbol,
-    updatedAt: now()
-  });
-
+  await update(ref(db, getProfilePath(state.user.uid)), { portraitSymbol: symbol, updatedAt: now() });
   state.userProfile = await loadUserProfile(state.user.uid);
   notify("Знак профиля обновлён.");
+  renderAll();
 }
 
 async function saveActiveCharacter(characterId) {
   if (!requireAuth()) return;
-
-  await update(ref(db, getProfilePath(state.user.uid)), {
-    activeCharacterId: characterId || "",
-    updatedAt: now()
-  });
-
+  await update(ref(db, getProfilePath(state.user.uid)), { activeCharacterId: characterId || "", updatedAt: now() });
   state.userProfile = await loadUserProfile(state.user.uid);
+  renderAll();
 }
 
 async function saveOwnerNote(characterId, noteText) {
   if (!requireAuth() || !characterId) return;
-
-  await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
-    ownerNote: noteText || "",
-    updatedAt: now()
-  });
-
+  await update(ref(db, getCharacterPath(state.user.uid, characterId)), { ownerNote: noteText || "", updatedAt: now() });
   await loadOwnCharacters();
+  await syncPublicCharacter(state.user.uid, characterId);
   notify("Заметка сохранена.");
+  renderAll();
 }
 
 async function addCharacter() {
   if (!requireAuth()) return;
-
   const name = ui.profile.charNameInput?.value.trim() || "";
   const clan = ui.profile.charClanInput?.value.trim() || "";
   const trainingStatus = ui.profile.charTrainingStatusSelect?.value || "warrior";
-
-  if (!name) {
-    notifyError("Впиши имя персонажа.");
-    return;
-  }
+  if (!name) { notifyError("Впиши имя персонажа."); return; }
 
   const charRef = push(ref(db, getCharactersPath(state.user.uid)));
   const newCharacter = createDefaultCharacter(name, clan, trainingStatus);
-
   await set(charRef, newCharacter);
 
   if (!state.userProfile?.activeCharacterId) {
-    await update(ref(db, getProfilePath(state.user.uid)), {
-      activeCharacterId: charRef.key,
-      updatedAt: now()
-    });
+    await update(ref(db, getProfilePath(state.user.uid)), { activeCharacterId: charRef.key, updatedAt: now() });
     state.userProfile = await loadUserProfile(state.user.uid);
   }
 
-  if (ui.profile.charNameInput) ui.profile.charNameInput.value = "";
-  if (ui.profile.charClanInput) ui.profile.charClanInput.value = "";
-  if (ui.profile.charTrainingStatusSelect) ui.profile.charTrainingStatusSelect.value = "warrior";
+  ui.profile.charNameInput.value = "";
+  ui.profile.charClanInput.value = "";
+  ui.profile.charTrainingStatusSelect.value = "warrior";
 
   await loadOwnCharacters();
+  await syncPublicCharacter(state.user.uid, charRef.key);
   notify("Новый персонаж добавлен.");
+  renderAll();
 }
 
 async function editCharacter(characterId) {
   if (!requireAuth()) return;
-
   const character = getCharacterById(characterId);
   if (!character) return;
-
   const formValue = await openCharacterEditModal(character);
   if (!formValue) return;
-
   const nextName = formValue.name || character.name || "Без имени";
   const nextClan = formValue.clan || "";
-
-  await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
-    name: nextName,
-    clan: nextClan,
-    updatedAt: now()
-  });
-
+  await update(ref(db, getCharacterPath(state.user.uid, characterId)), { name: nextName, clan: nextClan, updatedAt: now() });
   await loadOwnCharacters();
+  await syncPublicCharacter(state.user.uid, characterId);
   notify("Персонаж обновлён.");
+  renderAll();
 }
 
 async function deleteCharacter(characterId) {
   if (!requireAuth()) return;
-
   const character = getCharacterById(characterId);
   if (!character) return;
-
   const ok = await openConfirmModal({
     title: "Удаление персонажа",
     text: `Удалить персонажа «${character.name}»?`,
     confirmLabel: "Удалить",
     cancelLabel: "Отмена"
   });
-
   if (!ok) return;
-
   await remove(ref(db, getCharacterPath(state.user.uid, characterId)));
-
   if (state.userProfile?.activeCharacterId === characterId) {
-    await update(ref(db, getProfilePath(state.user.uid)), {
-      activeCharacterId: "",
-      updatedAt: now()
-    });
+    await update(ref(db, getProfilePath(state.user.uid)), { activeCharacterId: "", updatedAt: now() });
     state.userProfile = await loadUserProfile(state.user.uid);
   }
-
+  await removePublicCharacter(state.user.uid, characterId);
   await loadOwnCharacters();
   notify("Персонаж удалён.");
+  renderAll();
 }
 
 async function chooseUpgradeForCharacter(characterId, matchId = "") {
   if (!requireAuth()) return false;
-
   const character = getCharacterById(characterId);
   if (!character) return false;
-
   const normalized = normalizeCharacter(character);
   const pending = getPendingChoiceCount(normalized);
-
-  if (pending <= 0) {
-    notifyError("У персонажа нет доступных улучшений.");
-    return false;
-  }
-
-  const branchChoices = [
-    { value: "accuracy", label: "Повысить шанс попадания" },
-    { value: "dodge", label: "Повысить шанс уворота" },
-    { value: "power", label: "Повысить силу удара" }
-  ];
+  if (pending <= 0) { notifyError("У персонажа нет доступных улучшений."); return false; }
 
   const choice = await openChoiceModal({
     title: "Выбор улучшения",
     text: `${normalized.name} может получить улучшение. Доступно к выбору: ${pending}.`,
-    choices: branchChoices,
-    confirmLabel: "Выбрать"
+    choices: [
+      { value: "accuracy", label: "Повысить шанс попадания" },
+      { value: "dodge", label: "Повысить шанс уворота" },
+      { value: "power", label: "Повысить силу удара" }
+    ]
   });
-
   if (!choice) return false;
 
   let finalType = choice;
-
   if (choice === "power") {
     const powerChoice = await openChoiceModal({
       title: "Сила удара",
-      text: "Какой именно удар нужно усилить?",
+      text: "Какой именно приём нужно усилить?",
       choices: [
-        { value: "clawPower", label: "Удар когтями" },
-        { value: "bitePower", label: "Укус" }
-      ],
-      confirmLabel: "Подтвердить"
+        { value: "clawPower", label: "Удар лапой" },
+        { value: "bitePower", label: "Подсечка" }
+      ]
     });
-
     if (!powerChoice) return false;
     finalType = powerChoice;
   }
@@ -1550,32 +1184,27 @@ async function chooseUpgradeForCharacter(characterId, matchId = "") {
   }
 
   const updatedCharacter = addUpgradeToCurrentPool(normalized, finalType, matchId);
-
   await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
     training: updatedCharacter.training,
     updatedAt: now()
   });
 
   await loadOwnCharacters();
-
+  await syncPublicCharacter(state.user.uid, characterId);
   await pushFeedEntry({
     type: FEED_TYPES.UPGRADE_GAINED,
     createdAt: now(),
-    text: `Персонаж ${updatedCharacter.name} получает улучшение «${UPGRADE_DEFINITIONS[finalType].label}».`,
-    characterName: updatedCharacter.name,
-    upgradeLabel: UPGRADE_DEFINITIONS[finalType].label
+    text: `Персонаж ${updatedCharacter.name} получает улучшение «${UPGRADE_DEFINITIONS[finalType].label}».`
   });
-
   notify(`Улучшение «${UPGRADE_DEFINITIONS[finalType].label}» получено.`);
+  renderAll();
   return true;
 }
 
 async function promoteApprenticeToWarrior(characterId) {
   if (!requireAuth()) return false;
-
   const character = getCharacterById(characterId);
   if (!character) return false;
-
   const normalized = normalizeCharacter(character);
   if (normalized.trainingStatus !== "apprentice") {
     notifyError("Этот персонаж уже воитель.");
@@ -1587,35 +1216,22 @@ async function promoteApprenticeToWarrior(characterId) {
 
   const ok = await openConfirmModal({
     title: "Посвящение в воители",
-    text: transferLimit > 0
-      ? `${normalized.name} может перенести ${transferLimit} улучшение(й). Остальные ученические улучшения исчезнут.`
-      : `${normalized.name} будет посвящён в воители без переноса улучшений.`,
-    confirmLabel: "Продолжить",
-    cancelLabel: "Отмена"
+    text: transferLimit > 0 ? `${normalized.name} может перенести ${transferLimit} улучшение(й).` : `${normalized.name} будет посвящён в воители без переноса улучшений.`,
+    confirmLabel: "Продолжить"
   });
-
   if (!ok) return false;
 
   const selectedIds = [];
-
   if (transferLimit > 0) {
-    const available = apprenticeUpgrades.map(item => ({
-      value: item.id,
-      label: item.label
-    }));
-
     for (let i = 0; i < transferLimit; i += 1) {
-      const remaining = available.filter(item => !selectedIds.includes(item.value));
+      const remaining = apprenticeUpgrades.filter(item => !selectedIds.includes(item.id));
       if (!remaining.length) break;
-
       const selected = await openChoiceModal({
         title: `Перенос улучшения ${i + 1} из ${transferLimit}`,
         text: "Выберите улучшение, которое нужно сохранить.",
-        choices: remaining,
-        confirmLabel: "Сохранить",
+        choices: remaining.map(item => ({ value: item.id, label: item.label })),
         cancelLabel: "Пропустить"
       });
-
       if (!selected) break;
       if (!selectedIds.includes(selected)) selectedIds.push(selected);
     }
@@ -1623,90 +1239,110 @@ async function promoteApprenticeToWarrior(characterId) {
 
   const transferred = apprenticeUpgrades.filter(item => selectedIds.includes(item.id));
   const updatedCharacter = deepClone(normalized);
-
   updatedCharacter.trainingStatus = "warrior";
-  updatedCharacter.training.warriorUpgrades = [
-    ...updatedCharacter.training.warriorUpgrades,
-    ...transferred.map(item => ({ ...item, sourceStatus: "apprentice" }))
-  ];
+  updatedCharacter.training.warriorUpgrades = [...updatedCharacter.training.warriorUpgrades, ...transferred.map(item => ({ ...item, sourceStatus: "apprentice" }))];
   updatedCharacter.training.apprenticeUpgrades = [];
   updatedCharacter.training.promotion.canTransferNow = false;
   updatedCharacter.training.promotion.transferredAt = now();
   updatedCharacter.training.promotion.transferredCount = transferred.length;
-  updatedCharacter.training.promotion.lastTransferSummary = transferred.length
-    ? transferred.map(item => item.label).join(", ")
-    : "без переноса";
+  updatedCharacter.training.promotion.lastTransferSummary = transferred.length ? transferred.map(item => item.label).join(", ") : "без переноса";
   updatedCharacter.training.upgradeHistory.unshift({
     id: `promotion_${Math.random().toString(36).slice(2, 9)}`,
     action: "promotion_transfer",
     label: updatedCharacter.training.promotion.lastTransferSummary,
     createdAt: now()
   });
-  updatedCharacter.updatedAt = now();
 
   await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
     trainingStatus: "warrior",
     training: updatedCharacter.training,
     updatedAt: now()
   });
-
   await loadOwnCharacters();
-
-  await pushFeedEntry({
-    type: FEED_TYPES.PROMOTION_TRANSFER,
-    createdAt: now(),
-    text: `Персонаж ${updatedCharacter.name} посвящается в воители и переносит прогресс: ${updatedCharacter.training.promotion.lastTransferSummary}.`,
-    characterName: updatedCharacter.name,
-    transferSummary: updatedCharacter.training.promotion.lastTransferSummary
-  });
-
+  await syncPublicCharacter(state.user.uid, characterId);
+  await pushFeedEntry({ type: FEED_TYPES.PROMOTION_TRANSFER, createdAt: now(), text: `Персонаж ${updatedCharacter.name} посвящается в воители.` });
   notify(`${updatedCharacter.name} посвящён в воители.`);
+  renderAll();
   return true;
 }
 
-/* ==========================================================================
-   AUTH И БАЗОВОЕ СОСТОЯНИЕ
-   ========================================================================== */
+function getEnemiesForSeat(room, seatId, participantMap = null) {
+  const mode = room?.settings?.mode || room?.battle?.roomMode || "duel";
+  const source = participantMap || room?.seats || {};
+  const self = source[seatId];
+  if (!self) return [];
+
+  const aliveCheck = participantMap ? entry => !entry.defeated && !entry.escaped && entry.hp > 0 : entry => entry.uid && entry.included !== false;
+  return Object.entries(source)
+    .filter(([otherSeatId, entry]) => {
+      if (otherSeatId === seatId) return false;
+      if (!entry) return false;
+      if (!aliveCheck(entry)) return false;
+      if (mode === "ffa") return true;
+      return entry.teamId !== self.teamId;
+    })
+    .map(([otherSeatId, entry]) => ({ seatId: otherSeatId, ...entry }));
+}
+
+function validateRoomComposition(room) {
+  const normalized = normalizeRoom(room, room?.code);
+  const included = getIncludedSeats(normalized);
+  const mode = normalized.settings.mode;
+  if (!included.length) return { valid: false, title: "Нет участников", reason: "В комнате ещё нет активных персонажей." };
+
+  if (mode === "duel") {
+    if (included.length !== 2) return { valid: false, title: "Дуэль", reason: "Для дуэли нужны ровно 2 активных персонажа." };
+    const teams = new Set(included.map(item => item.teamId).filter(Boolean));
+    if (teams.size !== 2) return { valid: false, title: "Дуэль", reason: "В дуэли бойцы должны быть на разных сторонах." };
+    return { valid: true, title: "Дуэль", reason: "Состав подходит для боя 1 × 1." };
+  }
+
+  if (mode === "ffa") {
+    if (included.length !== 3) return { valid: false, title: "FFA", reason: "В режиме «каждый сам за себя» должно быть ровно 3 активных персонажа." };
+    return { valid: true, title: "FFA", reason: "Состав подходит для тройной схватки каждый сам за себя." };
+  }
+
+  const alpha = included.filter(item => item.teamId === "alpha");
+  const beta = included.filter(item => item.teamId === "beta");
+  if (!alpha.length || !beta.length) return { valid: false, title: "Команды", reason: "Для командной схватки нужны обе стороны." };
+  if (alpha.length > 3 || beta.length > 3) return { valid: false, title: "Команды", reason: "На одной стороне не может быть больше трёх бойцов." };
+  if (included.length > 6) return { valid: false, title: "Команды", reason: "Максимум — 6 бойцов в комнате." };
+  return { valid: true, title: "Команды", reason: `Состав подходит: ${alpha.length} × ${beta.length}.` };
+}
+
+function getReadyCountdownLeft(room) {
+  const readyTimes = getIncludedSeats(room).map(item => item.readyAt || 0).filter(Boolean);
+  if (!readyTimes.length) return 0;
+  const earliest = Math.min(...readyTimes);
+  return Math.max(0, earliest + READY_TIMEOUT_MS - now());
+}
+
+function getBattleCountdownLeft(room) {
+  const battle = room?.battle ? normalizeBattle(room.battle, room.settings?.mode) : null;
+  if (!battle?.timeoutAt) return 0;
+  return Math.max(0, battle.timeoutAt - now());
+}
+
+function getRoomCreditPreview(room) {
+  const validation = validateRoomComposition(room);
+  if (!validation.valid) return { badge: "Зачёта не будет", reason: validation.reason };
+  if (room?.status === "finished") return { badge: "Итог сохранён", reason: "Бой уже завершён." };
+  return { badge: "Зачёт возможен", reason: "При корректном завершении бойцы смогут получить зачёт с учётом дневного лимита и откатов по соперникам." };
+}
 
 async function bootstrapAdmin(user) {
   if (!user?.email) return false;
-  if (user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return false;
-
-  const adminRef = ref(db, `system/admins/${user.uid}`);
-  const snapshot = await get(adminRef);
-
-  if (!snapshot.exists()) {
-    await set(adminRef, {
-      uid: user.uid,
-      email: user.email,
-      createdAt: now()
-    });
-  }
-
-  return true;
+  return user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 }
-
 async function checkAdmin(user) {
-  if (!user) return false;
-
-  if (user.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-    return true;
-  }
-
-  const snapshot = await get(ref(db, `system/admins/${user.uid}`));
-  return snapshot.exists();
+  return Boolean(user?.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
 }
 
 async function handleRegister() {
   const accountName = ui.auth.accountName?.value.trim() || "";
   const email = ui.auth.email?.value.trim() || "";
   const password = ui.auth.password?.value.trim() || "";
-
-  if (!accountName || !email || !password) {
-    notifyError("Заполни имя профиля, почту и пароль.");
-    return;
-  }
-
+  if (!accountName || !email || !password) { notifyError("Заполни имя профиля, почту и пароль."); return; }
   const credentials = await createUserWithEmailAndPassword(auth, email, password);
   await set(ref(db, getProfilePath(credentials.user.uid)), createDefaultProfile(accountName));
   text(ui.auth.status, `Вы вошли как ${accountName}.`);
@@ -1715,12 +1351,7 @@ async function handleRegister() {
 async function handleLogin() {
   const email = ui.auth.email?.value.trim() || "";
   const password = ui.auth.password?.value.trim() || "";
-
-  if (!email || !password) {
-    notifyError("Впиши почту и пароль.");
-    return;
-  }
-
+  if (!email || !password) { notifyError("Впиши почту и пароль."); return; }
   const credentials = await signInWithEmailAndPassword(auth, email, password);
   const profile = await ensureOwnProfile(credentials.user);
   text(ui.auth.status, `Вы вошли как ${profile.displayName || "Зенит"}.`);
@@ -1729,11 +1360,58 @@ async function handleLogin() {
 async function handleLogout() {
   await signOut(auth);
   state.currentRoomCode = "";
-  state.currentPlayerRole = null;
-  state.currentBattleTurnNumber = null;
+  state.currentSeatId = "";
   clearActiveRoomLocal();
   text(ui.auth.status, "Вы не вошли в аккаунт.");
   notify("Вы вышли из аккаунта.");
+}
+
+async function loadRecentFeedEntries() {
+  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
+  const snapshot = await get(feedQuery);
+  if (!snapshot.exists()) { state.feedCache = []; return []; }
+  state.feedCache = Object.values(snapshot.val()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return state.feedCache;
+}
+
+function renderFeedTicker() {
+  if (!ui.shell.feedTicker) return;
+  if (!state.feedCache.length) {
+    ui.shell.feedTicker.innerHTML = `<span class="feed-empty">✦ Лента пока пустует.</span>`;
+    return;
+  }
+  ui.shell.feedTicker.innerHTML = state.feedCache.slice(0, 10).map(item => `<span class="feed-item">✦ ${escapeHtml(item.text || "Событие")}</span>`).join("");
+}
+
+async function startGlobalWatchers() {
+  cleanupExternalWatchers();
+  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
+  state.unsubscribeFeed = onValue(feedQuery, snapshot => {
+    state.feedCache = snapshot.exists() ? Object.values(snapshot.val()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) : [];
+    renderFeedTicker();
+  });
+
+  state.unsubscribePublicCharacters = onValue(ref(db, getPublicCharactersPath()), snapshot => {
+    state.publicCharactersCache = snapshot.exists() ? Object.values(snapshot.val()).sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru")) : [];
+    renderPublicProfiles();
+  });
+
+  state.unsubscribeAdminMatches = onValue(ref(db, "matches"), snapshot => {
+    state.adminMatchesCache = snapshot.exists() ? snapshot.val() : {};
+    renderHistory();
+    if (state.isAdmin) renderAdmin();
+  });
+
+  if (state.isAdmin) {
+    state.unsubscribeAdminUsers = onValue(ref(db, "users"), snapshot => {
+      state.adminUsersCache = snapshot.exists() ? snapshot.val() : {};
+      renderAdmin();
+    });
+    state.unsubscribeAdminRooms = onValue(ref(db, "rooms"), snapshot => {
+      state.adminRoomsCache = snapshot.exists() ? snapshot.val() : {};
+      renderAdmin();
+    });
+  }
 }
 
 async function handleSignedInUser(user) {
@@ -1742,15 +1420,16 @@ async function handleSignedInUser(user) {
   state.isAdmin = await checkAdmin(user);
 
   state.userProfile = await loadUserProfile(user.uid);
-  if (!state.userProfile) {
-    state.userProfile = await ensureOwnProfile(user, "Зенит");
-  }
+  if (!state.userProfile) state.userProfile = await ensureOwnProfile(user, "Зенит");
 
   state.isBlocked = Boolean(state.userProfile?.blocked);
   applyTheme(state.userProfile?.themeId || readThemeLocal());
+  applyCardStyle(state.userProfile?.cardStyleId || readCardStyleLocal());
   await loadOwnCharacters();
-
   text(ui.auth.status, `Вы вошли как ${state.userProfile?.displayName || "Зенит"}.`);
+  await startGlobalWatchers();
+  await tryAutoJoinSavedRoom();
+  renderAll();
 }
 
 function handleSignedOutUser() {
@@ -1758,279 +1437,33 @@ function handleSignedOutUser() {
   state.userProfile = null;
   state.characters = {};
   state.currentRoomCode = "";
-  state.currentPlayerRole = null;
-  state.currentBattleTurnNumber = null;
+  state.currentSeatId = "";
+  state.currentRoom = null;
   state.isAdmin = false;
   state.isBlocked = false;
-
+  state.publicCharactersCache = [];
+  state.feedCache = [];
   state.adminUsersCache = {};
   state.adminRoomsCache = {};
   state.adminMatchesCache = {};
-  state.publicCharactersCache = [];
-  state.feedCache = [];
-  state.adminSelectedUserId = "";
-  state.shownRulesByRoom = {};
-
+  state.attackPlanDraft = {};
+  cleanupRoomWatcher();
+  cleanupExternalWatchers();
+  stopRoomTimer();
+  applyTheme(readThemeLocal());
+  applyCardStyle(readCardStyleLocal());
   text(ui.auth.status, "Вы не вошли в аккаунт.");
-  renderRoomBadge();
+  renderAll();
 }
 
-function createDefaultBattleAnalytics() {
-  return {
-    host: {
-      favoriteMoveCounters: createDefaultFavoriteCounters(),
-      accuracy: createDefaultAccuracyStats(),
-      targets: createDefaultTargetCounters()
-    },
-    guest: {
-      favoriteMoveCounters: createDefaultFavoriteCounters(),
-      accuracy: createDefaultAccuracyStats(),
-      targets: createDefaultTargetCounters()
-    }
-  };
-}
-
-function normalizeBattleAnalytics(raw) {
-  const base = createDefaultBattleAnalytics();
-  return {
-    host: {
-      favoriteMoveCounters: {
-        ...base.host.favoriteMoveCounters,
-        ...(raw?.host?.favoriteMoveCounters || {})
-      },
-      accuracy: {
-        ...base.host.accuracy,
-        ...(raw?.host?.accuracy || {})
-      },
-      targets: {
-        ...base.host.targets,
-        ...(raw?.host?.targets || {})
-      }
-    },
-    guest: {
-      favoriteMoveCounters: {
-        ...base.guest.favoriteMoveCounters,
-        ...(raw?.guest?.favoriteMoveCounters || {})
-      },
-      accuracy: {
-        ...base.guest.accuracy,
-        ...(raw?.guest?.accuracy || {})
-      },
-      targets: {
-        ...base.guest.targets,
-        ...(raw?.guest?.targets || {})
-      }
-    }
-  };
-}
-
-function normalizeBattle(raw) {
-  return {
-    hostHp: raw?.hostHp ?? 100,
-    guestHp: raw?.guestHp ?? 100,
-    turnNumber: raw?.turnNumber ?? 1,
-    winner: raw?.winner ?? null,
-    finishReason: raw?.finishReason ?? "",
-    matchSaved: raw?.matchSaved ?? false,
-    completedAt: raw?.completedAt ?? 0,
-    startedAt: raw?.startedAt ?? 0,
-    lastActionAt: raw?.lastActionAt ?? 0,
-    inactivityDeadlineAt: raw?.inactivityDeadlineAt ?? 0,
-    lastMessage: raw?.lastMessage ?? "Тренировка началась.",
-    log: safeArray(raw?.log),
-    analytics: normalizeBattleAnalytics(raw?.analytics),
-    playerNames: {
-      host: raw?.playerNames?.host || "Игрок 1",
-      guest: raw?.playerNames?.guest || "Игрок 2"
-    },
-    playerCharacterIds: {
-      host: raw?.playerCharacterIds?.host || "",
-      guest: raw?.playerCharacterIds?.guest || ""
-    },
-    effects: {
-      host: normalizeEffects(raw?.effects?.host),
-      guest: normalizeEffects(raw?.effects?.guest)
-    },
-    selections: {
-      host: normalizeSelection(raw?.selections?.host),
-      guest: normalizeSelection(raw?.selections?.guest)
-    }
-  };
-}
-
-/* ==========================================================================
-   КОМНАТЫ И ПРЕВЬЮ ЗАЧЁТА
-   ========================================================================== */
-
-function getTrainingCreditMatrix(hostStatus, guestStatus) {
-  const hostIsApprentice = hostStatus === "apprentice";
-  const guestIsApprentice = guestStatus === "apprentice";
-
-  if (!hostIsApprentice && !guestIsApprentice) {
-    return {
-      hostGetsCredit: true,
-      guestGetsCredit: true,
-      badge: "Зачёт получат оба",
-      reason: "Оба персонажа — воители."
-    };
-  }
-
-  if (hostIsApprentice && guestIsApprentice) {
-    return {
-      hostGetsCredit: true,
-      guestGetsCredit: true,
-      badge: "Зачёт получат оба",
-      reason: "Оба персонажа — оруженосцы."
-    };
-  }
-
-  if (hostIsApprentice && !guestIsApprentice) {
-    return {
-      hostGetsCredit: true,
-      guestGetsCredit: false,
-      badge: "Зачёт получит только оруженосец",
-      reason: "В паре воитель + оруженосец зачёт идёт только оруженосцу."
-    };
-  }
-
-  return {
-    hostGetsCredit: false,
-    guestGetsCredit: true,
-    badge: "Зачёт получит только оруженосец",
-    reason: "В паре воитель + оруженосец зачёт идёт только оруженосцу."
-  };
-}
-
-async function evaluateTrainingCreditForRoom(room) {
-  const host = room?.players?.host;
-  const guest = room?.players?.guest;
-
-  if (!host || !guest) {
-    return {
-      hostGetsCredit: false,
-      guestGetsCredit: false,
-      badge: "Зачёта не будет",
-      reason: "В комнате ещё нет двух персонажей."
-    };
-  }
-
-  const base = getTrainingCreditMatrix(host.trainingStatus, guest.trainingStatus);
-  const todayKey = getMoscowDateKey();
-  const pairKey = getPairKey(host.uid, host.characterId, guest.uid, guest.characterId);
-
-  let hostBlockedByDay = false;
-  let guestBlockedByDay = false;
-  let hostReason = "";
-  let guestReason = "";
-
-  if (base.hostGetsCredit) {
-    const hostSnap = await get(ref(db, getCharacterPath(host.uid, host.characterId)));
-    if (hostSnap.exists()) {
-      const hostCharacter = normalizeCharacter(hostSnap.val());
-      if (hostCharacter.training.progress.lastCreditedDateKey === todayKey) {
-        hostBlockedByDay = true;
-        hostReason = `${host.characterName} уже получил зачёт сегодня.`;
-      }
-    }
-  }
-
-  if (base.guestGetsCredit) {
-    const guestSnap = await get(ref(db, getCharacterPath(guest.uid, guest.characterId)));
-    if (guestSnap.exists()) {
-      const guestCharacter = normalizeCharacter(guestSnap.val());
-      if (guestCharacter.training.progress.lastCreditedDateKey === todayKey) {
-        guestBlockedByDay = true;
-        guestReason = `${guest.characterName} уже получил зачёт сегодня.`;
-      }
-    }
-  }
-
-  let pairBlocked = false;
-  let pairReason = "";
-  const pairSnap = await get(ref(db, getPairCooldownPath(pairKey)));
-
-  if (pairSnap.exists()) {
-    const cooldown = pairSnap.val();
-    if (compareDateKeys(todayKey, cooldown.availableFromDateKey || "") < 0) {
-      pairBlocked = true;
-      pairReason = `Эта пара ещё на откате до ${cooldown.availableFromDateKey}.`;
-    }
-  }
-
-  const hostGetsCredit = base.hostGetsCredit && !hostBlockedByDay && !pairBlocked;
-  const guestGetsCredit = base.guestGetsCredit && !guestBlockedByDay && !pairBlocked;
-
-  let badge = "Зачёта не будет";
-  if (hostGetsCredit && guestGetsCredit) badge = "Зачёт получат оба";
-  else if (hostGetsCredit || guestGetsCredit) badge = "Зачёт получит только оруженосец";
-
-  const reasons = [base.reason];
-  if (hostReason) reasons.push(hostReason);
-  if (guestReason) reasons.push(guestReason);
-  if (pairReason) reasons.push(pairReason);
-
-  return {
-    hostGetsCredit,
-    guestGetsCredit,
-    badge,
-    reason: reasons.filter(Boolean).join(" ")
-  };
-}
-
-function createBattlePayload(room) {
-  return {
-    hostHp: 100,
-    guestHp: 100,
-    turnNumber: 1,
-    winner: null,
-    finishReason: "",
-    matchSaved: false,
-    completedAt: 0,
-    startedAt: now(),
-    lastActionAt: now(),
-    inactivityDeadlineAt: now() + INACTIVITY_TIMEOUT_MS,
-    lastMessage: "Тренировка началась. Выберите действия на ход 1.",
-    log: ["Тренировка началась."],
-    analytics: createDefaultBattleAnalytics(),
-    playerNames: {
-      host: room.players.host.characterName,
-      guest: room.players.guest.characterName
-    },
-    playerCharacterIds: {
-      host: room.players.host.characterId,
-      guest: room.players.guest.characterId
-    },
-    effects: {
-      host: createDefaultEffects(),
-      guest: createDefaultEffects()
-    },
-    selections: createEmptySelections()
-  };
-}
-
-function getSelectedCharacterPayload() {
-  const characterId = getSelectedCharacterId();
-  const character = getCharacterById(characterId);
-
-  if (!characterId || !character) return null;
-  return {
-    characterId,
-    character: normalizeCharacter(character)
-  };
-}
 
 async function createRoom() {
   if (!requireAuth()) return;
-
   const selected = getSelectedCharacterPayload();
-  if (!selected) {
-    notifyError("Сначала выбери персонажа в профиле.");
-    return;
-  }
+  if (!selected) { notifyError("Сначала выбери персонажа в профиле."); return; }
 
   let roomCode = generateRoomCode();
   let tries = 0;
-
   while (tries < 10) {
     const snapshot = await get(ref(db, getRoomPath(roomCode)));
     if (!snapshot.exists()) break;
@@ -2038,846 +1471,681 @@ async function createRoom() {
     tries += 1;
   }
 
-  const profileName = state.userProfile?.displayName || "Зенит";
+  const room = createDefaultRoom("duel", {
+    uid: state.user.uid,
+    profileName: getCurrentUserDisplayName(),
+    characterId: selected.characterId,
+    characterName: selected.character.name,
+    clan: selected.character.clan || "",
+    trainingStatus: selected.character.trainingStatus || "warrior"
+  }, roomCode);
 
-  await set(ref(db, getRoomPath(roomCode)), {
-    code: roomCode,
-    status: "waiting",
-    createdAt: now(),
-    createdBy: state.user.uid,
-    hostUid: state.user.uid,
-    guestUid: "",
-    readyState: createEmptyReadyState(),
-    creditPreview: {
-      hostGetsCredit: false,
-      guestGetsCredit: false,
-      badge: "Зачёта не будет",
-      reason: "Ожидание второго игрока."
-    },
-    players: {
-      host: {
-        uid: state.user.uid,
-        profileName,
-        characterId: selected.characterId,
-        characterName: selected.character.name,
-        clan: selected.character.clan || "",
-        trainingStatus: selected.character.trainingStatus || "warrior"
-      },
-      guest: null
-    },
-    battle: null,
-    finishInfo: null,
-    matchId: ""
-  });
-
+  await set(ref(db, getRoomPath(roomCode)), room);
   state.currentRoomCode = roomCode;
-  state.currentPlayerRole = "host";
-  saveActiveRoomLocal(roomCode, "host");
+  saveActiveRoomLocal(roomCode);
+  watchCurrentRoom(roomCode);
   notify(`Комната ${roomCode} создана.`);
+}
+
+async function tryAutoJoinSavedRoom() {
+  if (!state.user) return;
+  const roomCode = readActiveRoomLocal();
+  if (!roomCode) return;
+  const snapshot = await get(ref(db, getRoomPath(roomCode)));
+  if (!snapshot.exists()) {
+    clearActiveRoomLocal();
+    return;
+  }
+  state.currentRoomCode = roomCode;
+  watchCurrentRoom(roomCode);
+}
+
+function getFirstEmptySeatId(room) {
+  return getSeatIds().find(seatId => !room.seats?.[seatId]?.uid) || "";
 }
 
 async function joinRoom() {
   if (!requireAuth()) return;
-
   const roomCode = (ui.room.roomCodeInput?.value || "").trim().toUpperCase();
   const selected = getSelectedCharacterPayload();
 
-  if (!roomCode) {
-    notifyError("Впиши код комнаты.");
-    return;
-  }
-
-  if (!selected) {
-    notifyError("Сначала выбери персонажа в профиле.");
-    return;
-  }
+  if (!roomCode) { notifyError("Впиши код комнаты."); return; }
+  if (!selected) { notifyError("Сначала выбери персонажа в профиле."); return; }
 
   const roomRef = ref(db, getRoomPath(roomCode));
   const snapshot = await get(roomRef);
+  if (!snapshot.exists()) { notifyError("Комната не найдена."); return; }
 
-  if (!snapshot.exists()) {
-    notifyError("Комната не найдена.");
-    return;
-  }
-
-  const room = snapshot.val();
-
-  if (room.hostUid === state.user.uid) {
+  const room = normalizeRoom(snapshot.val(), roomCode);
+  const existingSeatId = findMySeatId(room);
+  if (existingSeatId) {
     state.currentRoomCode = roomCode;
-    state.currentPlayerRole = "host";
-    saveActiveRoomLocal(roomCode, "host");
+    saveActiveRoomLocal(roomCode);
+    watchCurrentRoom(roomCode);
     notify(`Вы вернулись в комнату ${roomCode}.`);
     return;
   }
 
-  if (room.guestUid === state.user.uid) {
-    state.currentRoomCode = roomCode;
-    state.currentPlayerRole = "guest";
-    saveActiveRoomLocal(roomCode, "guest");
-    notify(`Вы вернулись в комнату ${roomCode}.`);
-    return;
-  }
+  const emptySeatId = getFirstEmptySeatId(room);
+  if (!emptySeatId) { notifyError("В комнате уже шесть игроков."); return; }
 
-  if (room.players?.guest) {
-    notifyError("В комнате уже есть второй игрок.");
-    return;
-  }
+  const teamId = room.settings.mode === "ffa"
+    ? `solo-${emptySeatId}`
+    : room.settings.mode === "duel"
+      ? (getOccupiedSeats(room).some(item => item.teamId === "alpha") ? "beta" : "alpha")
+      : "alpha";
 
   await update(roomRef, {
-    guestUid: state.user.uid,
-    status: "ready",
-    readyState: createEmptyReadyState(),
-    finishInfo: null,
-    battle: null,
-    "players/guest": {
+    [`seats/${emptySeatId}`]: {
+      seatId: emptySeatId,
       uid: state.user.uid,
-      profileName: state.userProfile?.displayName || "Зенит",
+      profileName: getCurrentUserDisplayName(),
       characterId: selected.characterId,
       characterName: selected.character.name,
       clan: selected.character.clan || "",
-      trainingStatus: selected.character.trainingStatus || "warrior"
-    }
-  });
-
-  const freshSnapshot = await get(roomRef);
-  const freshRoom = freshSnapshot.val();
-  const preview = await evaluateTrainingCreditForRoom(freshRoom);
-
-  await update(roomRef, {
-    creditPreview: preview
+      trainingStatus: selected.character.trainingStatus || "warrior",
+      included: true,
+      ready: false,
+      readyAt: 0,
+      teamId,
+      joinedAt: now()
+    },
+    status: "lobby",
+    result: null,
+    battle: null
   });
 
   state.currentRoomCode = roomCode;
-  state.currentPlayerRole = "guest";
-  saveActiveRoomLocal(roomCode, "guest");
+  saveActiveRoomLocal(roomCode);
+  watchCurrentRoom(roomCode);
   notify(`Вы вошли в комнату ${roomCode}.`);
-}
-
-async function tryAutoJoinSavedRoom() {
-  if (!state.user || state.isApplyingAutoJoin) return;
-
-  const saved = readActiveRoomLocal();
-  if (!saved?.roomCode) return;
-
-  state.isApplyingAutoJoin = true;
-
-  try {
-    const snapshot = await get(ref(db, getRoomPath(saved.roomCode)));
-
-    if (!snapshot.exists()) {
-      clearActiveRoomLocal();
-      return;
-    }
-
-    const room = snapshot.val();
-
-    if (room.hostUid === state.user.uid) {
-      state.currentRoomCode = saved.roomCode;
-      state.currentPlayerRole = "host";
-      return;
-    }
-
-    if (room.guestUid === state.user.uid) {
-      state.currentRoomCode = saved.roomCode;
-      state.currentPlayerRole = "guest";
-      return;
-    }
-
-    clearActiveRoomLocal();
-  } finally {
-    state.isApplyingAutoJoin = false;
-  }
 }
 
 async function leaveRoom() {
   if (!requireAuth()) return;
+  if (!state.currentRoomCode || !state.currentRoom) { notifyError("Вы сейчас не в комнате."); return; }
 
-  if (!state.currentRoomCode) {
-    notifyError("Вы сейчас не в комнате.");
-    return;
-  }
-
-  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
-  const snapshot = await get(roomRef);
-
-  if (!snapshot.exists()) {
+  const room = normalizeRoom(state.currentRoom, state.currentRoomCode);
+  const mySeatId = findMySeatId(room);
+  if (!mySeatId) {
     state.currentRoomCode = "";
-    state.currentPlayerRole = null;
+    state.currentSeatId = "";
+    state.currentRoom = null;
     clearActiveRoomLocal();
+    cleanupRoomWatcher();
+    renderAll();
     return;
   }
-
-  const room = snapshot.val();
 
   if (room.status === "battle") {
-    notifyError("Во время тренировки нужно использовать действие «Убежать», а не обычный выход.");
+    notifyError("Во время боя нужно использовать действие «Убежать», а не обычный выход.");
     return;
   }
 
-  if (state.currentPlayerRole === "host") {
-    await remove(roomRef);
-    notify("Комната закрыта создателем.");
-  } else if (state.currentPlayerRole === "guest") {
-    await update(roomRef, {
-      guestUid: "",
-      status: "waiting",
-      readyState: createEmptyReadyState(),
-      creditPreview: {
-        hostGetsCredit: false,
-        guestGetsCredit: false,
-        badge: "Зачёта не будет",
-        reason: "Ожидание второго игрока."
-      },
-      finishInfo: null,
+  const occupiedAfter = getOccupiedSeats(room).filter(item => item.seatId !== mySeatId);
+  if (!occupiedAfter.length) {
+    await remove(ref(db, getRoomPath(room.code)));
+  } else {
+    const patch = {
+      [`seats/${mySeatId}`]: createEmptySeat(mySeatId),
+      status: "lobby",
       battle: null,
-      "players/guest": null
-    });
-    notify("Вы покинули комнату.");
+      result: null
+    };
+    if (room.createdBy === state.user.uid) patch.createdBy = occupiedAfter[0].uid;
+    await update(ref(db, getRoomPath(room.code)), patch);
   }
 
   state.currentRoomCode = "";
-  state.currentPlayerRole = null;
+  state.currentSeatId = "";
+  state.currentRoom = null;
   clearActiveRoomLocal();
+  cleanupRoomWatcher();
+  stopRoomTimer();
+  notify("Вы покинули комнату.");
+  renderAll();
+}
+
+async function saveRoomSettings() {
+  if (!requireAuth()) return;
+  if (!state.currentRoomCode || !state.currentRoom) { notifyError("Сначала войди в комнату."); return; }
+
+  const room = normalizeRoom(state.currentRoom, state.currentRoomCode);
+  if (room.createdBy !== state.user.uid) { notifyError("Режим комнаты может менять только создатель."); return; }
+  if (room.status === "battle") { notifyError("Нельзя менять режим во время боя."); return; }
+
+  const mode = ui.room.roomModeSelect?.value || "duel";
+  const patch = {
+    "settings/mode": mode,
+    status: "lobby",
+    result: null,
+    battle: null
+  };
+
+  const occupied = getOccupiedSeats(room);
+  occupied.forEach((seat, index) => {
+    let teamId = seat.teamId || "alpha";
+    if (mode === "ffa") teamId = `solo-${seat.seatId}`;
+    if (mode === "duel") teamId = index === 0 ? "alpha" : index === 1 ? "beta" : "alpha";
+    patch[`seats/${seat.seatId}/teamId`] = teamId;
+    patch[`seats/${seat.seatId}/included`] = mode === "duel" ? index < 2 : mode === "ffa" ? index < 3 : true;
+    patch[`seats/${seat.seatId}/ready`] = false;
+    patch[`seats/${seat.seatId}/readyAt`] = 0;
+  });
+
+  await update(ref(db, getRoomPath(room.code)), patch);
+  notify("Режим комнаты обновлён.");
+}
+
+async function updateSeatConfig(seatId, { teamId, included, characterId }) {
+  if (!requireAuth()) return;
+  if (!state.currentRoomCode || !state.currentRoom) return;
+
+  const room = normalizeRoom(state.currentRoom, state.currentRoomCode);
+  if (room.status === "battle") {
+    notifyError("Нельзя менять место во время боя.");
+    return;
+  }
+  const seat = room.seats?.[seatId];
+  if (!seat || seat.uid !== state.user.uid) {
+    notifyError("Можно настраивать только своё место.");
+    return;
+  }
+
+  const patch = {};
+  if (typeof included === "boolean") patch[`seats/${seatId}/included`] = included;
+  if (teamId) patch[`seats/${seatId}/teamId`] = teamId;
+  patch[`seats/${seatId}/ready`] = false;
+  patch[`seats/${seatId}/readyAt`] = 0;
+
+  if (characterId && characterId !== seat.characterId) {
+    const character = getCharacterById(characterId);
+    if (character) {
+      patch[`seats/${seatId}/characterId`] = characterId;
+      patch[`seats/${seatId}/characterName`] = character.name;
+      patch[`seats/${seatId}/clan`] = character.clan || "";
+      patch[`seats/${seatId}/trainingStatus`] = character.trainingStatus || "warrior";
+    }
+  }
+
+  await update(ref(db, getRoomPath(room.code)), patch);
+  notify("Место в комнате обновлено.");
 }
 
 async function toggleReady() {
   if (!requireAuth()) return;
+  if (!state.currentRoomCode || !state.currentRoom) { notifyError("Сначала войди в комнату."); return; }
 
-  if (!state.currentRoomCode || !state.currentPlayerRole) {
-    notifyError("Сначала войди в комнату.");
-    return;
-  }
+  const room = normalizeRoom(state.currentRoom, state.currentRoomCode);
+  const mySeatId = findMySeatId(room);
+  if (!mySeatId) { notifyError("Вы не занимаете место в этой комнате."); return; }
+  if (room.status !== "lobby") { notifyError("Готовность меняется только в лобби."); return; }
 
-  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
-  const snapshot = await get(roomRef);
+  const seat = room.seats[mySeatId];
+  if (!seat.included) { notifyError("Сначала включи своего персонажа в состав."); return; }
 
-  if (!snapshot.exists()) {
-    notifyError("Комната больше не существует.");
-    return;
-  }
-
-  const room = snapshot.val();
-  if (room.status !== "ready") {
-    notifyError("Готовность можно менять только до начала тренировки.");
-    return;
-  }
-
-  const ready = normalizeReadyState(room.readyState);
-  const role = state.currentPlayerRole;
-  const field = role === "host" ? "host" : "guest";
-  const timeField = role === "host" ? "hostAt" : "guestAt";
-  const nextValue = !ready[field];
-
-  await update(roomRef, {
-    [`readyState/${field}`]: nextValue,
-    [`readyState/${timeField}`]: nextValue ? now() : 0
+  await update(ref(db, getRoomPath(room.code)), {
+    [`seats/${mySeatId}/ready`]: !seat.ready,
+    [`seats/${mySeatId}/readyAt`]: !seat.ready ? now() : 0
   });
-
-  const freshSnapshot = await get(roomRef);
-  const freshRoom = freshSnapshot.val();
-  const freshReady = normalizeReadyState(freshRoom.readyState);
-
-  if (freshReady.host && freshReady.guest) {
-    await update(roomRef, {
-      status: "battle",
-      battle: createBattlePayload(freshRoom),
-      finishInfo: null
-    });
-    notify("Оба игрока готовы. Тренировка начинается.");
-  } else {
-    notify(nextValue ? "Готовность подтверждена." : "Готовность снята.");
-  }
+  notify(!seat.ready ? "Готовность подтверждена." : "Готовность снята.");
 }
 
-async function finishBattleAsUnfinished(roomCode, reasonText = "Тренировка завершена из-за бездействия.") {
-  const roomRef = ref(db, getRoomPath(roomCode));
+function areIncludedSeatsReady(room) {
+  const included = getIncludedSeats(room);
+  return Boolean(included.length) && included.every(item => item.ready === true);
+}
 
-  await runTransaction(roomRef, room => {
-    if (!room) return room;
-    if (room.status !== "battle" && room.status !== "ready") return room;
+function applyAutoStunSubmissions(battle) {
+  Object.entries(battle.participants).forEach(([seatId, participant]) => {
+    if (participant.effects.stunTurns > 0 && !battle.submissions[seatId] && isParticipantAlive(participant)) {
+      battle.submissions[seatId] = { type: "stunned", attacks: [], submittedAt: now() };
+    }
+  });
+}
 
-    if (room.status === "ready") {
-      room.status = "finished";
-      room.readyState = createEmptyReadyState();
-      room.finishInfo = {
-        type: RESULT_TYPES.UNFINISHED,
-        reason: reasonText,
-        completedAt: now()
-      };
-      room.battle = null;
-      return room;
+async function startBattle() {
+  if (!requireAuth()) return;
+  if (!state.currentRoomCode || !state.currentRoom) { notifyError("Сначала войди в комнату."); return; }
+
+  const room = normalizeRoom(state.currentRoom, state.currentRoomCode);
+  if (room.createdBy !== state.user.uid) { notifyError("Бой запускает только создатель комнаты."); return; }
+  if (room.status === "battle") { notifyError("Бой уже идёт."); return; }
+
+  const validation = validateRoomComposition(room);
+  if (!validation.valid) { notifyError(validation.reason); return; }
+  if (!areIncludedSeatsReady(room)) { notifyError("Сначала все активные бойцы должны нажать готовность."); return; }
+
+  const battle = createBattleState(room);
+  applyAutoStunSubmissions(battle);
+  await update(ref(db, getRoomPath(room.code)), { status: "battle", battle, result: null });
+  notify("Бой начался.");
+}
+
+async function watchCurrentRoom(roomCode) {
+  cleanupRoomWatcher();
+  if (!roomCode) return;
+
+  state.unsubscribeRoom = onValue(ref(db, getRoomPath(roomCode)), async snapshot => {
+    if (!snapshot.exists()) {
+      state.currentRoom = null;
+      state.currentSeatId = "";
+      state.currentRoomCode = "";
+      clearActiveRoomLocal();
+      stopRoomTimer();
+      renderAll();
+      return;
     }
 
-    const battle = normalizeBattle(room.battle);
-    battle.winner = null;
-    battle.finishReason = "timeout_unfinished";
-    battle.lastMessage = reasonText;
-    battle.completedAt = now();
-    battle.log = appendRoundEntries(battle.log, [reasonText]);
+    const room = normalizeRoom(snapshot.val(), roomCode);
+    state.currentRoom = room;
+    state.currentRoomCode = roomCode;
+    state.currentSeatId = findMySeatId(room);
+    renderAll();
 
-    room.battle = battle;
+    const countdownDeadline = room.status === "battle" ? room.battle?.timeoutAt : (getReadyCountdownLeft(room) ? now() + getReadyCountdownLeft(room) : 0);
+    startRoomTimer(countdownDeadline, async () => {
+      if (room.status === "battle") await finishBattleAsUnfinished(room.code, "Бой завершён из-за бездействия.");
+    });
+
+    if (room.status === "finished") await saveFinishedMatchIfNeeded(room.code, room);
+  });
+}
+
+async function finishBattleAsUnfinished(roomCode, reasonText = "Бой завершён из-за бездействия.") {
+  const roomRef = ref(db, getRoomPath(roomCode));
+  await runTransaction(roomRef, raw => {
+    if (!raw) return raw;
+    const room = normalizeRoom(raw, roomCode);
+    if (room.status !== "battle") return raw;
+
     room.status = "finished";
-    room.finishInfo = {
-      type: RESULT_TYPES.UNFINISHED,
-      reason: reasonText,
-      completedAt: battle.completedAt
-    };
+    room.result = { type: RESULT_TYPES.UNFINISHED, reason: reasonText, finishedAt: now(), summary: reasonText };
+    room.battle.finished = true;
+    room.battle.lastMessage = reasonText;
+    room.battle.updatedAt = now();
+    room.battle.log.push({ id: `timeout_${now()}`, round: room.battle.round, text: reasonText, kind: "system", createdAt: now() });
     return room;
   });
 }
 
-/* ==========================================================================
-   БОЕВАЯ МЕХАНИКА
-   ========================================================================== */
-
-function createSelection(actionType, targetKey = null) {
-  if (actionType === "defend") return { type: "defend", dodgeRoll: randomRoll() };
-  if (actionType === "escape") return { type: "escape" };
-  if (actionType === "sand") return { type: "sand", attackRoll: randomRoll() };
-  if (actionType === "paw") return { type: "paw", targetKey, attackRoll: randomRoll() };
-  if (actionType === "trip") return { type: "trip", attackRoll: randomRoll() };
-  return null;
+function isBattleRoundReady(battle) {
+  const activeSeatIds = Object.entries(battle.participants).filter(([, p]) => isParticipantAlive(p)).map(([seatId]) => seatId);
+  applyAutoStunSubmissions(battle);
+  return activeSeatIds.every(seatId => Boolean(battle.submissions[seatId]));
 }
 
-function getSelectionLabel(selection) {
-  if (!selection?.type) return "—";
-  if (selection.type === "sand") return "Песок в глаза";
-  if (selection.type === "paw") {
-    const target = BODY_TARGETS[selection.targetKey];
+function getIncomingAttackCountMap(submissions) {
+  const map = {};
+  Object.values(submissions || {}).forEach(submission => {
+    if (submission?.type !== "attack") return;
+    safeArray(submission.attacks).forEach(attack => {
+      if (!attack?.targetSeatId) return;
+      map[attack.targetSeatId] = (map[attack.targetSeatId] || 0) + 1;
+    });
+  });
+  return map;
+}
+
+function createAttackSubmission(attacks) { return { type: "attack", attacks, submittedAt: now() }; }
+function createDefendSubmission() { return { type: "defend", attacks: [], submittedAt: now() }; }
+function createEscapeSubmission() { return { type: "escape", attacks: [], submittedAt: now() }; }
+
+function getSeatCombatTotals(characterId) {
+  const character = getCharacterById(characterId);
+  return character ? getCombatViewTotals(character) : createDefaultCombatBase();
+}
+
+function isAttackType(type) { return type === "sand" || type === "paw" || type === "trip"; }
+function attackTypeLabel(type, bodyTarget = "") {
+  if (type === "sand") return "Песок в глаза";
+  if (type === "trip") return "Подсечка";
+  if (type === "paw") {
+    const target = BODY_TARGETS[bodyTarget];
     return target ? `Удар лапой в ${target.label}` : "Удар лапой";
   }
-  if (selection.type === "trip") return "Подсечка";
-  if (selection.type === "defend") return "Защита";
-  if (selection.type === "escape") return "Побег";
-  if (selection.type === "stunned") return "Пропуск хода";
-  return "—";
+  return "Атака";
 }
 
-function appendRoundEntries(logItems, entries) {
-  return [...safeArray(logItems), ...safeArray(entries)].slice(-MAX_LOG_ITEMS);
+function recordAnalyticsForAttack(participant, attack, hit) {
+  if (!participant || !attack || !isAttackType(attack.type)) return;
+  participant.analytics.favoriteMoveCounters[attack.type] += 1;
+  participant.analytics.accuracy.totalAttacks += 1;
+  if (hit) participant.analytics.accuracy.hits += 1;
+  else participant.analytics.accuracy.misses += 1;
+  if (attack.type === "paw" && attack.bodyTarget && participant.analytics.targets[attack.bodyTarget] !== undefined) {
+    participant.analytics.targets[attack.bodyTarget] += 1;
+  }
 }
 
-function buildRoundSummary(entries) {
-  const clean = safeArray(entries).filter(Boolean);
-  if (!clean.length) return "";
-  if (clean.length === 1) return clean[0];
-  const [title, ...rest] = clean;
-  return `${title}: ${rest.join(" ")}`;
-}
+function resolveOneAttack({ battle, attackerSeatId, attack, roundEntries, startAliveSet }) {
+  const attacker = battle.participants[attackerSeatId];
+  const defender = battle.participants[attack.targetSeatId];
+  if (!attacker || !defender) return;
+  if (!startAliveSet.has(attackerSeatId)) return;
+  if (!isParticipantAlive(defender)) return;
+  if (!isAttackType(attack.type)) return;
 
-function getHp(battle, role) {
-  return role === "host" ? battle.hostHp : battle.guestHp;
-}
+  const attackerTotals = getSeatCombatTotals(attacker.characterId);
+  const defenderTotals = getSeatCombatTotals(defender.characterId);
+  const attackerName = attacker.name;
+  const defenderName = defender.name;
+  const defenderSubmission = battle.submissions[attack.targetSeatId];
 
-function setHp(battle, role, value) {
-  if (role === "host") battle.hostHp = Math.max(0, value);
-  else battle.guestHp = Math.max(0, value);
-}
+  let chance = 0;
+  let actionLabel = attackTypeLabel(attack.type, attack.bodyTarget);
+  let directDamage = 0;
+  let dotDamage = 0;
 
-function isAttackType(type) {
-  return type === "sand" || type === "paw" || type === "trip";
-}
-
-function applyForcedSelectionsForRound(battle) {
-  let changed = false;
-
-  if (!battle.selections.host && battle.effects.host.stunTurns > 0) {
-    battle.selections.host = { type: "stunned" };
-    changed = true;
+  if (attack.type === "sand") {
+    chance = CHANCES.sand + attackerTotals.accuracy - (attacker.effects.accuracyPenaltyTurns > 0 ? SAND_ACCURACY_PENALTY : 0);
+  } else if (attack.type === "trip") {
+    chance = CHANCES.trip + attackerTotals.accuracy - (attacker.effects.accuracyPenaltyTurns > 0 ? SAND_ACCURACY_PENALTY : 0);
+    directDamage = Math.round(DAMAGE.trip * (1 + attackerTotals.bitePower / 100));
+    dotDamage = Math.round(DOT.trip * (1 + attackerTotals.bitePower / 100));
+  } else if (attack.type === "paw") {
+    const target = BODY_TARGETS[attack.bodyTarget] || BODY_TARGETS.face;
+    chance = CHANCES.paw + target.chanceModifier + attackerTotals.accuracy - (attacker.effects.accuracyPenaltyTurns > 0 ? SAND_ACCURACY_PENALTY : 0);
+    directDamage = Math.round(target.directDamage * (1 + attackerTotals.clawPower / 100));
+    dotDamage = Math.round(target.dotDamage * (1 + attackerTotals.clawPower / 100));
   }
 
-  if (!battle.selections.guest && battle.effects.guest.stunTurns > 0) {
-    battle.selections.guest = { type: "stunned" };
-    changed = true;
+  chance = Math.max(0, chance);
+
+  if (defenderSubmission?.type === "defend" && defender.effects.dodgesLeft > 0) {
+    const dodgeChance = CHANCES.dodge + defenderTotals.dodge;
+    const dodgeRoll = randomRoll();
+    if (dodgeRoll <= dodgeChance) {
+      roundEntries.push(`${defenderName} успевает увернуться от приёма «${actionLabel}». Бросок уворота: ${dodgeRoll} из ${dodgeChance}.`);
+      recordAnalyticsForAttack(attacker, attack, false);
+      return;
+    }
+    roundEntries.push(`${defenderName} пытается увернуться от приёма «${actionLabel}», но не успевает. Бросок уворота: ${dodgeRoll} из ${dodgeChance}.`);
   }
 
-  return changed;
-}
+  const attackRoll = randomRoll();
+  if (attackRoll > chance) {
+    roundEntries.push(`${attackerName} использует «${actionLabel}», но промахивается. Бросок: ${attackRoll} из ${chance}.`);
+    if (attack.type === "trip") {
+      attacker.effects.stunTurns += 1;
+      roundEntries.push(`${attackerName} теряет равновесие и сам оглушается на следующий ход.`);
+    }
+    recordAnalyticsForAttack(attacker, attack, false);
+    return;
+  }
 
-function isRoundReady(battle) {
-  return Boolean(battle.selections.host && battle.selections.guest);
+  recordAnalyticsForAttack(attacker, attack, true);
+
+  if (attack.type === "sand") {
+    defender.effects.stunTurns += 1;
+    defender.effects.accuracyPenaltyTurns += SAND_PENALTY_TURNS;
+    roundEntries.push(`${attackerName} бросает песок в глаза ${defenderName}. Попадание. Бросок: ${attackRoll} из ${chance}.`);
+    roundEntries.push(`${defenderName} будет оглушён на следующий ход, а шанс его попадания снизится на 10% на 2 хода.`);
+    return;
+  }
+
+  defender.hp = Math.max(0, defender.hp - directDamage);
+  defender.effects.pendingDotDamage += dotDamage;
+
+  if (attack.type === "paw") {
+    const target = BODY_TARGETS[attack.bodyTarget] || BODY_TARGETS.face;
+    roundEntries.push(`${attackerName} попадает лапой в ${target.label}. Бросок: ${attackRoll} из ${chance}.`);
+    roundEntries.push(`${defenderName} теряет ${directDamage}% очков спарринга и получит кровотечение ${dotDamage}% со следующего хода.`);
+  } else if (attack.type === "trip") {
+    defender.effects.stunTurns += 1;
+    roundEntries.push(`${attackerName} проводит подсечку. Попадание. Бросок: ${attackRoll} из ${chance}.`);
+    roundEntries.push(`${defenderName} теряет ${directDamage}% очков спарринга, будет оглушён на следующий ход и получит кровотечение ${dotDamage}% со следующего хода.`);
+  }
+
+  if (defender.hp <= 0) {
+    defender.defeated = true;
+    roundEntries.push(`${defenderName} падает до 0% очков спарринга.`);
+  }
 }
 
 function applyBleedAtRoundStart(battle, roundEntries) {
-  ["host", "guest"].forEach(role => {
-    const effect = battle.effects[role];
-    if (effect.dotDamage <= 0) return;
-
-    const before = getHp(battle, role);
-    const after = Math.max(0, before - effect.dotDamage);
-    setHp(battle, role, after);
-
-    roundEntries.push(`${battle.playerNames[role]} теряет ${effect.dotDamage}% очков спарринга из-за накопленного ранения.`);
+  Object.values(battle.participants).forEach(participant => {
+    if (!isParticipantAlive(participant)) return;
+    if (participant.effects.dotDamage <= 0) return;
+    participant.hp = Math.max(0, participant.hp - participant.effects.dotDamage);
+    roundEntries.push(`${participant.name} теряет ${participant.effects.dotDamage}% очков спарринга из-за накопленного ранения.`);
+    if (participant.hp <= 0) {
+      participant.defeated = true;
+      roundEntries.push(`${participant.name} больше не может продолжать бой.`);
+    }
   });
 }
 
-function getHpOutcome(battle) {
-  if (battle.hostHp <= 0 && battle.guestHp <= 0) {
-    return {
-      winner: null,
-      message: "Оба бойца падают до 0%. Тренировка завершается ничьей.",
-      finishReason: "double_ko"
-    };
-  }
-
-  if (battle.hostHp <= 0) {
-    return {
-      winner: "guest",
-      message: `${battle.playerNames.host} падает до 0%. Побеждает ${battle.playerNames.guest}.`,
-      finishReason: "hp_zero"
-    };
-  }
-
-  if (battle.guestHp <= 0) {
-    return {
-      winner: "host",
-      message: `${battle.playerNames.guest} падает до 0%. Побеждает ${battle.playerNames.host}.`,
-      finishReason: "hp_zero"
-    };
-  }
-
-  return null;
+function prepareRoundForDefenders(battle) {
+  Object.entries(battle.submissions).forEach(([seatId, submission]) => {
+    const participant = battle.participants[seatId];
+    if (!participant || !isParticipantAlive(participant)) return;
+    if (submission?.type === "defend") participant.effects.dodgesLeft = Math.max(0, participant.effects.dodgesLeft - 1);
+  });
 }
 
-function resolveEscapeOutcome(battle, escapedRole) {
-  const otherRole = getOtherRole(escapedRole);
-  const escapedHp = getHp(battle, escapedRole);
-  const otherHp = getHp(battle, otherRole);
-
-  if (escapedHp > otherHp) {
-    return {
-      winner: escapedRole,
-      message: `${battle.playerNames[escapedRole]} покидает тренировку, сохранив преимущество по очкам. Победа остаётся за ним.`,
-      finishReason: "escape_with_lead"
-    };
-  }
-
-  if (escapedHp < otherHp) {
-    return {
-      winner: otherRole,
-      message: `${battle.playerNames[escapedRole]} покидает тренировку с меньшим количеством очков. Побеждает ${battle.playerNames[otherRole]}.`,
-      finishReason: "escape_loss"
-    };
-  }
-
-  return {
-    winner: null,
-    message: `${battle.playerNames[escapedRole]} покидает тренировку при равных очках. Итог — ничья.`,
-    finishReason: "escape_draw"
-  };
+function decrementRoundStartEffects(battle, startedEffects) {
+  Object.entries(startedEffects).forEach(([seatId, started]) => {
+    const participant = battle.participants[seatId];
+    if (!participant) return;
+    if ((started.stunTurns || 0) > 0) participant.effects.stunTurns = Math.max(0, participant.effects.stunTurns - 1);
+    if ((started.accuracyPenaltyTurns || 0) > 0) participant.effects.accuracyPenaltyTurns = Math.max(0, participant.effects.accuracyPenaltyTurns - 1);
+  });
+  Object.values(battle.participants).forEach(participant => {
+    participant.effects.dotDamage += participant.effects.pendingDotDamage;
+    participant.effects.pendingDotDamage = 0;
+  });
 }
 
-function resolveDoubleEscapeOutcome(battle) {
-  if (battle.hostHp > battle.guestHp) {
-    return {
-      winner: "host",
-      message: `${battle.playerNames.host} и ${battle.playerNames.guest} одновременно покидают тренировку, но преимущество остаётся у ${battle.playerNames.host}.`,
-      finishReason: "double_escape_host"
-    };
+function getBattleOutcome(battle) {
+  const living = getLivingParticipants(battle);
+
+  if (battle.roomMode === "ffa") {
+    if (living.length === 1) return { finished: true, winnerSeatId: living[0].seatId, winnerTeamId: "", resultText: `${living[0].name} остаётся последним на лапах и побеждает.` };
+    if (!living.length) return { finished: true, winnerSeatId: "", winnerTeamId: "", resultText: "Все участники выбывают. Итог — ничья." };
+    return { finished: false, winnerSeatId: "", winnerTeamId: "", resultText: "" };
   }
 
-  if (battle.guestHp > battle.hostHp) {
-    return {
-      winner: "guest",
-      message: `${battle.playerNames.host} и ${battle.playerNames.guest} одновременно покидают тренировку, но преимущество остаётся у ${battle.playerNames.guest}.`,
-      finishReason: "double_escape_guest"
-    };
+  const groups = {};
+  living.forEach(participant => {
+    groups[participant.teamId] = groups[participant.teamId] || [];
+    groups[participant.teamId].push(participant);
+  });
+  const activeTeams = Object.keys(groups);
+  if (activeTeams.length === 1) {
+    const winnerTeamId = activeTeams[0];
+    const label = getTeamLabel("teams", winnerTeamId);
+    return { finished: true, winnerSeatId: "", winnerTeamId, resultText: `${label} остаётся в строю и побеждает.` };
   }
-
-  return {
-    winner: null,
-    message: "Оба бойца одновременно покидают тренировку при равных очках. Итог — ничья.",
-    finishReason: "double_escape_draw"
-  };
+  if (!activeTeams.length) return { finished: true, winnerSeatId: "", winnerTeamId: "", resultText: "Обе стороны выбывают одновременно. Итог — ничья." };
+  return { finished: false, winnerSeatId: "", winnerTeamId: "", resultText: "" };
 }
 
-function recordAnalyticsForSelection(analytics, selection, hit) {
-  if (!selection?.type) return;
-
-  if (selection.type === "sand" || selection.type === "paw" || selection.type === "trip") {
-    analytics.favoriteMoveCounters[selection.type] += 1;
-    analytics.accuracy.totalAttacks += 1;
-
-    if (hit) analytics.accuracy.hits += 1;
-    else analytics.accuracy.misses += 1;
-  }
-
-  if (selection.type === "paw" && selection.targetKey && analytics.targets[selection.targetKey] !== undefined) {
-    analytics.targets[selection.targetKey] += 1;
-  }
-}
-
-function resolveDodge(defenderName, defenderAction, actionLabel, roundEntries) {
-  const dodgeRoll = defenderAction?.dodgeRoll ?? randomRoll();
-  const dodgeSuccess = dodgeRoll <= CHANCES.dodge;
-
-  if (dodgeSuccess) {
-    roundEntries.push(`${defenderName} успевает увернуться от приёма «${actionLabel}». Бросок уворота: ${dodgeRoll} из ${CHANCES.dodge}.`);
-    return true;
-  }
-
-  roundEntries.push(`${defenderName} пытается увернуться от приёма «${actionLabel}», но не успевает. Бросок уворота: ${dodgeRoll} из ${CHANCES.dodge}.`);
-  return false;
-}
-
-function resolveSingleAttack({
-  attackerRole,
-  defenderRole,
-  attackerAction,
-  defenderAction,
-  battle,
-  hadAccuracyPenalty,
-  roundEntries
-}) {
-  if (!isAttackType(attackerAction?.type)) return { resolved: false, hit: false };
-
-  const attackerName = battle.playerNames[attackerRole];
-  const defenderName = battle.playerNames[defenderRole];
-  const attackerEffects = battle.effects[attackerRole];
-  const defenderEffects = battle.effects[defenderRole];
-  const attackerAnalytics = battle.analytics[attackerRole];
-
-  let chance = 0;
-  let actionLabel = "";
-  let target = null;
-
-  if (attackerAction.type === "sand") {
-    chance = CHANCES.sand;
-    actionLabel = "Песок в глаза";
-  }
-
-  if (attackerAction.type === "paw") {
-    target = BODY_TARGETS[attackerAction.targetKey];
-    if (!target) {
-      roundEntries.push(`${attackerName} пытается ударить лапой, но цель выбрана неверно.`);
-      recordAnalyticsForSelection(attackerAnalytics, attackerAction, false);
-      return { resolved: false, hit: false };
-    }
-    chance = CHANCES.paw + target.chanceModifier;
-    actionLabel = `Удар лапой в ${target.label}`;
-  }
-
-  if (attackerAction.type === "trip") {
-    chance = CHANCES.trip;
-    actionLabel = "Подсечка";
-  }
-
-  if (hadAccuracyPenalty) chance -= SAND_ACCURACY_PENALTY;
-  chance = Math.max(0, chance);
-
-  if (defenderAction?.type === "defend") {
-    const dodged = resolveDodge(defenderName, defenderAction, actionLabel, roundEntries);
-    if (dodged) {
-      recordAnalyticsForSelection(attackerAnalytics, attackerAction, false);
-      return { resolved: true, hit: false };
-    }
-  }
-
-  const attackRoll = attackerAction.attackRoll ?? randomRoll();
-  const hit = attackRoll <= chance;
-  recordAnalyticsForSelection(attackerAnalytics, attackerAction, hit);
-
-  if (!hit) {
-    roundEntries.push(`${attackerName} использует «${actionLabel}», но промахивается. Бросок: ${attackRoll} из ${chance}.`);
-
-    if (attackerAction.type === "trip") {
-      attackerEffects.stunTurns += 1;
-      roundEntries.push(`${attackerName} теряет равновесие и сам оглушается на следующий ход.`);
-    }
-
-    return { resolved: true, hit: false };
-  }
-
-  if (attackerAction.type === "sand") {
-    defenderEffects.stunTurns += 1;
-    defenderEffects.accuracyPenaltyTurns += SAND_PENALTY_TURNS;
-
-    roundEntries.push(`${attackerName} бросает песок в глаза. Попадание. Бросок: ${attackRoll} из ${chance}.`);
-    roundEntries.push(`${defenderName} будет оглушён на следующий ход, а шанс его попадания снизится на 10% на 2 хода.`);
-
-    return { resolved: true, hit: true };
-  }
-
-  if (attackerAction.type === "paw") {
-    const beforeHp = getHp(battle, defenderRole);
-    const afterHp = Math.max(0, beforeHp - target.directDamage);
-    setHp(battle, defenderRole, afterHp);
-    defenderEffects.pendingDotDamage += target.dotDamage;
-
-    roundEntries.push(`${attackerName} попадает лапой в ${target.label}. Бросок: ${attackRoll} из ${chance}.`);
-    roundEntries.push(`${defenderName} теряет ${target.directDamage}% очков спарринга и получит кровотечение ${target.dotDamage}% за ход, начиная со следующего хода.`);
-
-    return { resolved: true, hit: true };
-  }
-
-  if (attackerAction.type === "trip") {
-    const beforeHp = getHp(battle, defenderRole);
-    const afterHp = Math.max(0, beforeHp - DAMAGE.trip);
-    setHp(battle, defenderRole, afterHp);
-    defenderEffects.pendingDotDamage += DOT.trip;
-    defenderEffects.stunTurns += 1;
-
-    roundEntries.push(`${attackerName} проводит подсечку. Попадание. Бросок: ${attackRoll} из ${chance}.`);
-    roundEntries.push(`${defenderName} теряет ${DAMAGE.trip}% очков спарринга, будет оглушён на следующий ход и получит кровотечение ${DOT.trip}% за ход, начиная со следующего хода.`);
-
-    return { resolved: true, hit: true };
-  }
-
-  return { resolved: false, hit: false };
-}
-
-function resolveRound(battle) {
-  const roundEntries = [`Ход ${battle.turnNumber}`];
-
-  const hostStarting = {
-    stunTurns: battle.effects.host.stunTurns,
-    accuracyPenaltyTurns: battle.effects.host.accuracyPenaltyTurns
-  };
-
-  const guestStarting = {
-    stunTurns: battle.effects.guest.stunTurns,
-    accuracyPenaltyTurns: battle.effects.guest.accuracyPenaltyTurns
-  };
+function resolveBattleRound(battle) {
+  const roundEntries = [`Ход ${battle.round}`];
+  const startedEffects = Object.fromEntries(Object.entries(battle.participants).map(([seatId, participant]) => [seatId, { stunTurns: participant.effects.stunTurns, accuracyPenaltyTurns: participant.effects.accuracyPenaltyTurns }]));
 
   applyBleedAtRoundStart(battle, roundEntries);
+  prepareRoundForDefenders(battle);
 
-  const bleedOutcome = getHpOutcome(battle);
-  if (bleedOutcome) {
-    const summary = buildRoundSummary([...roundEntries, bleedOutcome.message]);
-    battle.winner = bleedOutcome.winner;
-    battle.lastMessage = summary;
-    battle.finishReason = bleedOutcome.finishReason;
-    battle.log = appendRoundEntries(battle.log, [summary]);
-    battle.selections = createEmptySelections();
-    battle.completedAt = now();
-    return { status: "finished", battle };
-  }
+  const startAliveSet = new Set(Object.entries(battle.participants).filter(([, p]) => isParticipantAlive(p)).map(([seatId]) => seatId));
 
-  const hostAction = battle.selections.host;
-  const guestAction = battle.selections.guest;
+  Object.entries(battle.submissions).forEach(([seatId, submission]) => {
+    const participant = battle.participants[seatId];
+    if (!participant) return;
 
-  if (hostAction?.type === "stunned") {
-    roundEntries.push(`${battle.playerNames.host} оглушён и пропускает ход.`);
-  }
+    if (submission?.type === "stunned") {
+      roundEntries.push(`${participant.name} оглушён и пропускает ход.`);
+      return;
+    }
+    if (!startAliveSet.has(seatId)) return;
 
-  if (guestAction?.type === "stunned") {
-    roundEntries.push(`${battle.playerNames.guest} оглушён и пропускает ход.`);
-  }
-
-  if (hostAction?.type === "escape" && guestAction?.type === "escape") {
-    const outcome = resolveDoubleEscapeOutcome(battle);
-    const summary = buildRoundSummary([...roundEntries, outcome.message]);
-
-    battle.winner = outcome.winner;
-    battle.lastMessage = summary;
-    battle.finishReason = outcome.finishReason;
-    battle.log = appendRoundEntries(battle.log, [summary]);
-    battle.selections = createEmptySelections();
-    battle.completedAt = now();
-
-    return { status: "finished", battle };
-  }
-
-  if (hostAction?.type === "escape") {
-    const outcome = resolveEscapeOutcome(battle, "host");
-    const summary = buildRoundSummary([...roundEntries, outcome.message]);
-
-    battle.winner = outcome.winner;
-    battle.lastMessage = summary;
-    battle.finishReason = outcome.finishReason;
-    battle.log = appendRoundEntries(battle.log, [summary]);
-    battle.selections = createEmptySelections();
-    battle.completedAt = now();
-
-    return { status: "finished", battle };
-  }
-
-  if (guestAction?.type === "escape") {
-    const outcome = resolveEscapeOutcome(battle, "guest");
-    const summary = buildRoundSummary([...roundEntries, outcome.message]);
-
-    battle.winner = outcome.winner;
-    battle.lastMessage = summary;
-    battle.finishReason = outcome.finishReason;
-    battle.log = appendRoundEntries(battle.log, [summary]);
-    battle.selections = createEmptySelections();
-    battle.completedAt = now();
-
-    return { status: "finished", battle };
-  }
-
-  if (hostAction?.type === "defend") {
-    battle.effects.host.dodgesLeft = Math.max(0, battle.effects.host.dodgesLeft - 1);
-  }
-
-  if (guestAction?.type === "defend") {
-    battle.effects.guest.dodgesLeft = Math.max(0, battle.effects.guest.dodgesLeft - 1);
-  }
-
-  const hostResult = resolveSingleAttack({
-    attackerRole: "host",
-    defenderRole: "guest",
-    attackerAction: hostAction,
-    defenderAction: guestAction,
-    battle,
-    hadAccuracyPenalty: hostStarting.accuracyPenaltyTurns > 0,
-    roundEntries
-  });
-
-  const guestResult = resolveSingleAttack({
-    attackerRole: "guest",
-    defenderRole: "host",
-    attackerAction: guestAction,
-    defenderAction: hostAction,
-    battle,
-    hadAccuracyPenalty: guestStarting.accuracyPenaltyTurns > 0,
-    roundEntries
-  });
-
-  if (hostAction?.type === "defend" && !isAttackType(guestAction?.type)) {
-    roundEntries.push(`${battle.playerNames.host} уходит в защиту, но атаки в его сторону не следует.`);
-  }
-
-  if (guestAction?.type === "defend" && !isAttackType(hostAction?.type)) {
-    roundEntries.push(`${battle.playerNames.guest} уходит в защиту, но атаки в его сторону не следует.`);
-  }
-
-  if (!hostResult.resolved && !guestResult.resolved && roundEntries.length === 1) {
-    roundEntries.push("Оба бойца выжидают и не наносят ударов.");
-  }
-
-  const hpOutcome = getHpOutcome(battle);
-
-  if (hostStarting.stunTurns > 0) {
-    battle.effects.host.stunTurns = Math.max(0, battle.effects.host.stunTurns - 1);
-  }
-
-  if (guestStarting.stunTurns > 0) {
-    battle.effects.guest.stunTurns = Math.max(0, battle.effects.guest.stunTurns - 1);
-  }
-
-  if (hostStarting.accuracyPenaltyTurns > 0) {
-    battle.effects.host.accuracyPenaltyTurns = Math.max(0, battle.effects.host.accuracyPenaltyTurns - 1);
-  }
-
-  if (guestStarting.accuracyPenaltyTurns > 0) {
-    battle.effects.guest.accuracyPenaltyTurns = Math.max(0, battle.effects.guest.accuracyPenaltyTurns - 1);
-  }
-
-  battle.effects.host.dotDamage += battle.effects.host.pendingDotDamage;
-  battle.effects.host.pendingDotDamage = 0;
-
-  battle.effects.guest.dotDamage += battle.effects.guest.pendingDotDamage;
-  battle.effects.guest.pendingDotDamage = 0;
-
-  battle.selections = createEmptySelections();
-
-  if (hpOutcome) {
-    const summary = buildRoundSummary([...roundEntries, hpOutcome.message]);
-
-    battle.winner = hpOutcome.winner;
-    battle.lastMessage = summary;
-    battle.finishReason = hpOutcome.finishReason;
-    battle.log = appendRoundEntries(battle.log, [summary]);
-    battle.completedAt = now();
-
-    return { status: "finished", battle };
-  }
-
-  const roundSummary = buildRoundSummary(roundEntries);
-  battle.turnNumber += 1;
-  battle.lastMessage = roundSummary || `Ход ${battle.turnNumber - 1} завершён.`;
-  battle.log = appendRoundEntries(battle.log, [battle.lastMessage]);
-  battle.lastActionAt = now();
-  battle.inactivityDeadlineAt = now() + INACTIVITY_TIMEOUT_MS;
-
-  return { status: "battle", battle };
-}
-
-async function submitSelection(selection) {
-  if (!state.currentRoomCode) {
-    notifyError("Сначала войди в комнату.");
-    return;
-  }
-
-  if (!state.currentPlayerRole) {
-    notifyError("Наблюдатель не может выбирать действия.");
-    return;
-  }
-
-  if (!state.currentBattleTurnNumber) {
-    notifyError("Тренировка ещё не готова к действиям.");
-    return;
-  }
-
-  const expectedTurnNumber = state.currentBattleTurnNumber;
-  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
-
-  await runTransaction(roomRef, room => {
-    if (!room || room.status !== "battle") return room;
-
-    const battle = normalizeBattle(room.battle);
-
-    if (battle.turnNumber !== expectedTurnNumber) return room;
-    if (battle.winner) return room;
-    if (battle.selections[state.currentPlayerRole]) return room;
-    if (battle.effects[state.currentPlayerRole].stunTurns > 0) return room;
-    if (selection.type === "defend" && battle.effects[state.currentPlayerRole].dodgesLeft <= 0) return room;
-
-    battle.selections[state.currentPlayerRole] = selection;
-    battle.lastActionAt = now();
-    battle.inactivityDeadlineAt = now() + INACTIVITY_TIMEOUT_MS;
-
-    applyForcedSelectionsForRound(battle);
-
-    if (isRoundReady(battle)) {
-      const resolved = resolveRound(battle);
-      room.battle = resolved.battle;
-      room.status = resolved.status;
-
-      if (resolved.status === "finished") {
-        room.finishInfo = {
-          type: resolved.battle.winner ? "finished" : RESULT_TYPES.DRAW,
-          reason: resolved.battle.finishReason || "",
-          completedAt: resolved.battle.completedAt || now()
-        };
-      }
-
-      return room;
+    if (submission?.type === "escape") {
+      participant.escaped = true;
+      roundEntries.push(`${participant.name} выходит из боя.`);
+      return;
     }
 
-    room.battle = battle;
-    return room;
+    if (submission?.type === "defend") {
+      roundEntries.push(`${participant.name} уходит в защиту.`);
+      return;
+    }
+
+    if (submission?.type === "attack") {
+      safeArray(submission.attacks).forEach(attack => resolveOneAttack({ battle, attackerSeatId: seatId, attack, roundEntries, startAliveSet }));
+    }
   });
 
-  notify(`Выбрано действие: ${getSelectionLabel(selection)}.`);
+  decrementRoundStartEffects(battle, startedEffects);
+
+  const outcome = getBattleOutcome(battle);
+  battle.updatedAt = now();
+  battle.timeoutAt = now() + INACTIVITY_TIMEOUT_MS;
+  battle.lastMessage = outcome.finished ? outcome.resultText : (roundEntries[roundEntries.length - 1] || "Ход завершён.");
+
+  roundEntries.forEach((entry, index) => {
+    battle.log.push({ id: `log_${battle.round}_${index}_${Math.random().toString(36).slice(2, 7)}`, round: battle.round, text: entry, kind: "round", createdAt: now() });
+  });
+
+  if (outcome.finished) {
+    battle.finished = true;
+    battle.winnerSeatId = outcome.winnerSeatId;
+    battle.winnerTeamId = outcome.winnerTeamId;
+    battle.log.push({ id: `result_${now()}`, round: battle.round, text: outcome.resultText, kind: "result", createdAt: now() });
+  } else {
+    battle.round += 1;
+    battle.submissions = {};
+    applyAutoStunSubmissions(battle);
+  }
+
+  battle.log = battle.log.slice(-MAX_LOG_ITEMS);
+  return battle;
 }
 
-async function performTurn(actionType, targetKey = null) {
-  const selection = createSelection(actionType, targetKey);
-  if (!selection) return;
-  await submitSelection(selection);
+function validateAttackPlanForSeat(room, battle, seatId, attacks) {
+  const participantMap = battle.participants;
+  const self = participantMap[seatId];
+  if (!self || !isParticipantAlive(self)) return { valid: false, reason: "Этот боец уже не может действовать." };
+
+  const enemies = getEnemiesForSeat({ settings: { mode: battle.roomMode } }, seatId, participantMap);
+  if (!enemies.length) return { valid: false, reason: "У этого бойца нет противников." };
+  if (!safeArray(attacks).length) return { valid: false, reason: "Нужно выбрать хотя бы одну цель." };
+
+  const uniqueTargets = new Set();
+  for (const attack of attacks) {
+    if (!attack?.targetSeatId) return { valid: false, reason: "У атаки не выбрана цель." };
+    if (!enemies.some(enemy => enemy.seatId === attack.targetSeatId)) return { valid: false, reason: "Нельзя бить союзников или выбывших бойцов." };
+    if (uniqueTargets.has(attack.targetSeatId)) return { valid: false, reason: "Нельзя назначить два удара в одного и того же противника в одном ходу." };
+    uniqueTargets.add(attack.targetSeatId);
+    if (!isAttackType(attack.type)) return { valid: false, reason: "У каждой цели должен быть выбран корректный приём." };
+    if (attack.type === "paw" && !BODY_TARGETS[attack.bodyTarget]) return { valid: false, reason: "Для удара лапой нужно выбрать часть тела." };
+  }
+
+  const projected = deepClone(battle.submissions || {});
+  projected[seatId] = createAttackSubmission(attacks);
+  const incomingMap = getIncomingAttackCountMap(projected);
+  const brokenTarget = Object.entries(incomingMap).find(([, count]) => count > 2);
+  if (brokenTarget) return { valid: false, reason: "Нельзя, чтобы трое и больше атаковали одну цель в одном ходу." };
+
+  return { valid: true, reason: "" };
 }
 
-/* ==========================================================================
-   СОХРАНЕНИЕ ИСТОРИИ И ИТОГОВ
-   ========================================================================== */
+async function submitBattleAction(submission) {
+  if (!state.currentRoomCode || !state.currentRoom) { notifyError("Сначала войди в комнату."); return; }
 
-async function createTrainingHistoryEntry(payload) {
-  const historyRef = push(ref(db, "trainingHistory"));
-  await set(historyRef, payload);
-  return historyRef.key;
+  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
+  const expectedSeatId = state.currentSeatId;
+
+  await runTransaction(roomRef, raw => {
+    if (!raw) return raw;
+    const room = normalizeRoom(raw, state.currentRoomCode);
+    if (room.status !== "battle" || !room.battle) return raw;
+
+    const mySeatId = expectedSeatId || findMySeatId(room);
+    if (!mySeatId) return raw;
+
+    const participant = room.battle.participants[mySeatId];
+    if (!participant || !isParticipantAlive(participant)) return raw;
+    if (room.battle.submissions[mySeatId]) return raw;
+
+    if (submission.type === "defend" && participant.effects.dodgesLeft <= 0) return raw;
+    if (submission.type === "attack") {
+      const validation = validateAttackPlanForSeat(room, room.battle, mySeatId, submission.attacks);
+      if (!validation.valid) return raw;
+    }
+
+    room.battle.submissions[mySeatId] = { ...submission, submittedAt: now() };
+    applyAutoStunSubmissions(room.battle);
+
+    if (isBattleRoundReady(room.battle)) {
+      room.battle = resolveBattleRound(room.battle);
+      if (room.battle.finished) {
+        room.status = "finished";
+        room.result = {
+          type: room.battle.winnerSeatId || room.battle.winnerTeamId ? "finished" : RESULT_TYPES.DRAW,
+          reason: room.battle.lastMessage,
+          finishedAt: now(),
+          summary: room.battle.lastMessage
+        };
+      } else {
+        room.status = "battle";
+      }
+    }
+
+    return room;
+  });
 }
 
-function applyBattleOutcomeToCharacter({
-  character,
-  resultType,
-  opponentName,
-  finishedAt,
-  creditGranted,
-  creditReason,
-  analyticsDelta
-}) {
+async function submitAttackPlanFromBuilder() {
+  const room = state.currentRoom;
+  if (!room?.battle || !state.currentSeatId) { notifyError("Сейчас нет активного хода."); return; }
+
+  const cards = Array.from(ui.battle.attackBuilderList?.querySelectorAll(".attack-target-card") || []);
+  const attacks = [];
+
+  for (const card of cards) {
+    const targetSeatId = card.dataset.targetSeatId || "";
+    const attackType = card.querySelector("[data-role='attackType']")?.value || "";
+    const bodyTarget = card.querySelector("[data-role='bodyTarget']")?.value || "face";
+    if (!attackType) continue;
+    attacks.push({ targetSeatId, type: attackType, bodyTarget });
+  }
+
+  const validation = validateAttackPlanForSeat(room, room.battle, state.currentSeatId, attacks);
+  if (!validation.valid) { notifyError(validation.reason); return; }
+
+  await submitBattleAction(createAttackSubmission(attacks));
+  hide(ui.battle.attackMenu);
+  show(ui.battle.actions);
+  state.attackPlanDraft = {};
+  notify("Удары отправлены.");
+}
+
+async function submitDefend() {
+  await submitBattleAction(createDefendSubmission());
+  notify("Вы выбрали защиту.");
+}
+
+async function submitEscape() {
+  await submitBattleAction(createEscapeSubmission());
+  notify("Вы выбрали побег.");
+}
+
+
+function getBattleResultBySeat(room, seatId) {
+  const battle = room?.battle;
+  if (!battle) return RESULT_TYPES.UNFINISHED;
+  if (battle.roomMode === "ffa") {
+    if (!battle.winnerSeatId) return RESULT_TYPES.DRAW;
+    return battle.winnerSeatId === seatId ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
+  }
+  const participant = battle.participants?.[seatId];
+  if (!participant) return RESULT_TYPES.UNFINISHED;
+  if (!battle.winnerTeamId) return RESULT_TYPES.DRAW;
+  return participant.teamId === battle.winnerTeamId ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
+}
+
+function applyBattleOutcomeToCharacter({ character, resultType, opponentName, finishedAt, creditGranted, creditReason, analyticsDelta }) {
   const next = deepClone(normalizeCharacter(character));
   const thresholds = getThresholdsForStatus(next.trainingStatus);
 
@@ -2889,17 +2157,11 @@ function applyBattleOutcomeToCharacter({
   next.profileStats.lastOpponentName = opponentName || "";
 
   if (analyticsDelta) {
-    Object.entries(analyticsDelta.favoriteMoveCounters || {}).forEach(([key, value]) => {
-      next.training.analytics.favoriteMoveCounters[key] += value || 0;
-    });
-
+    Object.entries(analyticsDelta.favoriteMoveCounters || {}).forEach(([key, value]) => { next.training.analytics.favoriteMoveCounters[key] += value || 0; });
     next.training.analytics.accuracy.totalAttacks += analyticsDelta.accuracy?.totalAttacks || 0;
     next.training.analytics.accuracy.hits += analyticsDelta.accuracy?.hits || 0;
     next.training.analytics.accuracy.misses += analyticsDelta.accuracy?.misses || 0;
-
-    Object.entries(analyticsDelta.targets || {}).forEach(([key, value]) => {
-      next.training.analytics.targets[key] += value || 0;
-    });
+    Object.entries(analyticsDelta.targets || {}).forEach(([key, value]) => { next.training.analytics.targets[key] += value || 0; });
   }
 
   if (resultType === RESULT_TYPES.UNFINISHED) {
@@ -2947,260 +2209,158 @@ function applyBattleOutcomeToCharacter({
   return next;
 }
 
-async function saveFinishedMatchIfNeeded(roomCode, room) {
-  if (!room || room.status !== "finished") return;
+async function canCharacterReceiveCreditForBattle(room, seatId, character) {
+  const finishedAt = room?.result?.finishedAt || now();
+  const todayKey = getMoscowDateKey(finishedAt);
+  const progress = normalizeCharacter(character).training.progress;
+  if (progress.lastCreditedDateKey === todayKey) {
+    return { allowed: false, reason: `${character.name} уже получил зачёт сегодня.` };
+  }
 
-  const battle = room.battle ? normalizeBattle(room.battle) : null;
+  const participant = room.battle?.participants?.[seatId];
+  if (!participant) return { allowed: false, reason: "Персонаж не найден в итогах боя." };
 
-  if (battle?.matchSaved === true) return;
+  const enemies = Object.entries(room.battle?.participants || {})
+    .filter(([otherSeatId, other]) => otherSeatId !== seatId && other.uid && other.characterId && (room.battle.roomMode === "ffa" ? true : other.teamId !== participant.teamId))
+    .map(([, other]) => other);
 
-  const host = room.players?.host;
-  const guest = room.players?.guest;
-  if (!host || !guest) return;
-
-  const lockPath = room.battle
-    ? `${getRoomPath(roomCode)}/battle/matchSaved`
-    : `${getRoomPath(roomCode)}/finishInfo/matchSaved`;
-
-  const lockRef = ref(db, lockPath);
-  const lockResult = await runTransaction(lockRef, current => {
-    if (current === true) return;
-    return true;
-  });
-
-  if (!lockResult.committed) return;
-
-  const finishedAt = battle?.completedAt || room.finishInfo?.completedAt || now();
-
-  let resultTypeForHost = RESULT_TYPES.UNFINISHED;
-  let resultTypeForGuest = RESULT_TYPES.UNFINISHED;
-
-  if (battle) {
-    if (battle.finishReason === "timeout_unfinished") {
-      resultTypeForHost = RESULT_TYPES.UNFINISHED;
-      resultTypeForGuest = RESULT_TYPES.UNFINISHED;
-    } else if (battle.winner === "host") {
-      resultTypeForHost = RESULT_TYPES.WIN;
-      resultTypeForGuest = RESULT_TYPES.LOSS;
-    } else if (battle.winner === "guest") {
-      resultTypeForHost = RESULT_TYPES.LOSS;
-      resultTypeForGuest = RESULT_TYPES.WIN;
-    } else {
-      resultTypeForHost = RESULT_TYPES.DRAW;
-      resultTypeForGuest = RESULT_TYPES.DRAW;
+  for (const enemy of enemies) {
+    const pairKey = getPairKeyForCharacters(participant.uid, participant.characterId, enemy.uid, enemy.characterId);
+    const pairSnapshot = await get(ref(db, getPairCooldownPath(pairKey)));
+    if (pairSnapshot.exists()) {
+      const cooldown = pairSnapshot.val();
+      if (compareDateKeys(todayKey, cooldown.availableFromDateKey || "") < 0) {
+        return { allowed: false, reason: `Откат с соперником ${enemy.name} ещё не закончился.` };
+      }
     }
   }
 
-  const preview = room.creditPreview || await evaluateTrainingCreditForRoom(room);
-  const pairKey = getPairKey(host.uid, host.characterId, guest.uid, guest.characterId);
-  const todayKey = getMoscowDateKey(finishedAt);
-  const cooldownUntil = addDaysToDateKey(todayKey, PAIR_COOLDOWN_DAYS);
+  return { allowed: true, reason: "Зачёт возможен." };
+}
+
+async function saveFinishedMatchIfNeeded(roomCode, roomRaw) {
+  const room = normalizeRoom(roomRaw, roomCode);
+  if (!room || room.status !== "finished" || !room.battle) return;
+  if (room.result?.savedAt) return;
+
+  const roomRef = ref(db, getRoomPath(roomCode));
+  const lockRef = ref(db, `${getRoomPath(roomCode)}/result/savedAt`);
+  const lockResult = await runTransaction(lockRef, current => {
+    if (current) return;
+    return now();
+  });
+  if (!lockResult.committed) return;
+
+  const finishedAt = room.result?.finishedAt || now();
+  const battle = room.battle;
+  const includedSeats = Object.entries(battle.participants).map(([seatId, item]) => ({ seatId, ...item }));
 
   const matchRef = push(ref(db, "matches"));
   await set(matchRef, {
     roomCode,
-    hostUid: host.uid,
-    guestUid: guest.uid,
-    hostProfileName: host.profileName || "",
-    guestProfileName: guest.profileName || "",
-    hostCharacterId: host.characterId || "",
-    guestCharacterId: guest.characterId || "",
-    hostCharacterName: host.characterName || "",
-    guestCharacterName: guest.characterName || "",
-    winnerUid: battle?.winner === "host" ? host.uid : battle?.winner === "guest" ? guest.uid : "",
-    winnerRole: battle?.winner || "",
-    resultType: battle?.finishReason || room.finishInfo?.type || "",
     finishedAt,
-    hostHp: battle?.hostHp ?? 100,
-    guestHp: battle?.guestHp ?? 100,
-    hostResult: resultTypeForHost,
-    guestResult: resultTypeForGuest,
-    creditPreview: preview,
-    lastMessage: battle?.lastMessage || room.finishInfo?.reason || "",
-    battleLog: safeArray(battle?.log)
+    mode: battle.roomMode,
+    winnerSeatId: battle.winnerSeatId || "",
+    winnerTeamId: battle.winnerTeamId || "",
+    summary: room.result?.summary || battle.lastMessage || "",
+    log: battle.log,
+    participants: includedSeats.map(item => ({
+      seatId: item.seatId,
+      uid: item.uid,
+      characterId: item.characterId,
+      characterName: item.name,
+      profileName: item.profileName,
+      teamId: item.teamId,
+      hp: item.hp,
+      escaped: item.escaped,
+      defeated: item.defeated
+    }))
   });
 
-  await update(ref(db, getRoomPath(roomCode)), {
-    matchId: matchRef.key,
-    finishedAt
-  });
+  const creditedNames = [];
 
-  const hostSnap = await get(ref(db, getCharacterPath(host.uid, host.characterId)));
-  const guestSnap = await get(ref(db, getCharacterPath(guest.uid, guest.characterId)));
+  for (const participant of includedSeats) {
+    const characterSnap = await get(ref(db, getCharacterPath(participant.uid, participant.characterId)));
+    if (!characterSnap.exists()) continue;
 
-  if (!hostSnap.exists() || !guestSnap.exists()) return;
+    const character = normalizeCharacter(characterSnap.val());
+    const resultType = getBattleResultBySeat(room, participant.seatId);
+    const enemies = Object.entries(battle.participants)
+      .filter(([otherSeatId, other]) => otherSeatId !== participant.seatId && (battle.roomMode === "ffa" ? true : other.teamId !== participant.teamId))
+      .map(([, other]) => other.name)
+      .join(", ");
 
-  const hostCharacter = normalizeCharacter(hostSnap.val());
-  const guestCharacter = normalizeCharacter(guestSnap.val());
+    const creditCheck = resultType === RESULT_TYPES.UNFINISHED ? { allowed: false, reason: "Бой не завершён корректно." } : await canCharacterReceiveCreditForBattle(room, participant.seatId, character);
 
-  const hostAnalytics = battle?.analytics?.host || createDefaultBattleAnalytics().host;
-  const guestAnalytics = battle?.analytics?.guest || createDefaultBattleAnalytics().guest;
-
-  const nextHost = applyBattleOutcomeToCharacter({
-    character: hostCharacter,
-    resultType: resultTypeForHost,
-    opponentName: guest.characterName,
-    finishedAt,
-    creditGranted: preview.hostGetsCredit,
-    creditReason: preview.reason,
-    analyticsDelta: hostAnalytics
-  });
-
-  const nextGuest = applyBattleOutcomeToCharacter({
-    character: guestCharacter,
-    resultType: resultTypeForGuest,
-    opponentName: host.characterName,
-    finishedAt,
-    creditGranted: preview.guestGetsCredit,
-    creditReason: preview.reason,
-    analyticsDelta: guestAnalytics
-  });
-
-  await set(ref(db, getCharacterPath(host.uid, host.characterId)), nextHost);
-  await set(ref(db, getCharacterPath(guest.uid, guest.characterId)), nextGuest);
-
-  if (resultTypeForHost !== RESULT_TYPES.UNFINISHED || resultTypeForGuest !== RESULT_TYPES.UNFINISHED) {
-    await set(ref(db, getPairCooldownPath(pairKey)), {
-      pairKey,
-      hostCharacterName: host.characterName,
-      guestCharacterName: guest.characterName,
-      lastCompletedDateKey: todayKey,
-      availableFromDateKey: cooldownUntil,
-      updatedAt: finishedAt
+    const nextCharacter = applyBattleOutcomeToCharacter({
+      character,
+      resultType,
+      opponentName: enemies,
+      finishedAt,
+      creditGranted: creditCheck.allowed,
+      creditReason: creditCheck.reason,
+      analyticsDelta: participant.analytics
     });
+
+    await set(ref(db, getCharacterPath(participant.uid, participant.characterId)), nextCharacter);
+
+    if (participant.uid === state.user?.uid) {
+      state.characters[participant.characterId] = nextCharacter;
+    }
+
+    await update(ref(db, `${getPublicCharactersPath()}/${participant.uid}__${participant.characterId}`), {
+      uid: participant.uid,
+      characterId: participant.characterId,
+      ownerName: participant.profileName,
+      name: nextCharacter.name,
+      clan: nextCharacter.clan,
+      trainingStatus: nextCharacter.trainingStatus,
+      updatedAt: now(),
+      ownerNote: nextCharacter.ownerNote,
+      profileStats: nextCharacter.profileStats,
+      training: nextCharacter.training
+    });
+
+    if (creditCheck.allowed) {
+      creditedNames.push(nextCharacter.name);
+      const enemyParticipants = Object.entries(battle.participants)
+        .filter(([otherSeatId, other]) => otherSeatId !== participant.seatId && (battle.roomMode === "ffa" ? true : other.teamId !== participant.teamId))
+        .map(([, other]) => other);
+
+      const todayKey = getMoscowDateKey(finishedAt);
+      const cooldownUntil = addDaysToDateKey(todayKey, PAIR_COOLDOWN_DAYS);
+
+      for (const enemy of enemyParticipants) {
+        const pairKey = getPairKeyForCharacters(participant.uid, participant.characterId, enemy.uid, enemy.characterId);
+        await set(ref(db, getPairCooldownPath(pairKey)), {
+          pairKey,
+          lastCompletedDateKey: todayKey,
+          availableFromDateKey: cooldownUntil,
+          updatedAt: finishedAt,
+          roomCode
+        });
+      }
+    }
   }
 
-  await createTrainingHistoryEntry({
-    matchId: matchRef.key,
-    roomCode,
-    finishedAt,
-    pairKey,
-    hostUid: host.uid,
-    guestUid: guest.uid,
-    hostCharacterId: host.characterId,
-    guestCharacterId: guest.characterId,
-    hostCharacterName: host.characterName,
-    guestCharacterName: guest.characterName,
-    hostResult: resultTypeForHost,
-    guestResult: resultTypeForGuest,
-    hostGetsCredit: preview.hostGetsCredit,
-    guestGetsCredit: preview.guestGetsCredit,
-    creditReason: preview.reason,
-    finishReason: battle?.finishReason || room.finishInfo?.reason || "",
-    lastMessage: battle?.lastMessage || room.finishInfo?.reason || "",
-    battleLog: safeArray(battle?.log)
-  });
+  await update(roomRef, { "result/matchId": matchRef.key });
 
-  if (resultTypeForHost !== RESULT_TYPES.UNFINISHED && (preview.hostGetsCredit || preview.guestGetsCredit)) {
+  if (creditedNames.length) {
     await pushFeedEntry({
       type: FEED_TYPES.CREDITED_TRAINING,
       createdAt: finishedAt,
-      text: `Последняя засчитанная тренировка: ${host.characterName} и ${guest.characterName}.`,
-      hostCharacterName: host.characterName,
-      guestCharacterName: guest.characterName
+      text: `Засчитанная тренировка: ${creditedNames.join(", ")}.`
     });
   }
 
-  if (state.user?.uid === host.uid || state.user?.uid === guest.uid) {
+  if (state.user) {
     await loadOwnCharacters();
+    renderAll();
   }
-}
-
-/* ==========================================================================
-   ТАЙМЕРЫ И ВСПОМОГАТЕЛЬНОЕ
-   ========================================================================== */
-
-function getReadyCountdownLeft(room) {
-  const ready = normalizeReadyState(room?.readyState);
-  const points = [ready.hostAt, ready.guestAt].filter(Boolean);
-  if (!points.length) return 0;
-
-  const earliest = Math.min(...points);
-  return Math.max(0, earliest + READY_TIMEOUT_MS - now());
-}
-
-function getBattleCountdownLeft(room) {
-  const battle = room?.battle ? normalizeBattle(room.battle) : null;
-  if (!battle?.inactivityDeadlineAt) return 0;
-  return Math.max(0, battle.inactivityDeadlineAt - now());
-}
-
-async function ensurePromotionAvailability(characterId) {
-  if (!requireAuth()) return;
-
-  const character = getCharacterById(characterId);
-  if (!character) return;
-
-  const normalized = normalizeCharacter(character);
-  if (normalized.trainingStatus !== "apprentice") return;
-
-  const limit = getPromotionTransferLimit(normalized.training.apprenticeUpgrades.length);
-  if (limit <= 0) return;
-
-  await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
-    "training/promotion/canTransferNow": true,
-    updatedAt: now()
-  });
-
-  await loadOwnCharacters();
-}
-
-function cleanupRoomWatcher() {
-  if (typeof state.unsubscribeRoom === "function") {
-    state.unsubscribeRoom();
-    state.unsubscribeRoom = null;
-  }
-}
-
-function cleanupAdminWatchers() {
-  if (typeof state.unsubscribeUsers === "function") {
-    state.unsubscribeUsers();
-    state.unsubscribeUsers = null;
-  }
-  if (typeof state.unsubscribeRooms === "function") {
-    state.unsubscribeRooms();
-    state.unsubscribeRooms = null;
-  }
-  if (typeof state.unsubscribeMatches === "function") {
-    state.unsubscribeMatches();
-    state.unsubscribeMatches = null;
-  }
-  if (typeof state.unsubscribeFeed === "function") {
-    state.unsubscribeFeed();
-    state.unsubscribeFeed = null;
-  }
-}
-
-function stopRoomTimer() {
-  if (state.roomTimerInterval) {
-    clearInterval(state.roomTimerInterval);
-    state.roomTimerInterval = null;
-  }
-}
-
-function startRoomTimer(deadline, onExpire) {
-  stopRoomTimer();
-  if (!deadline) return;
-
-  state.roomTimerInterval = setInterval(() => {
-    const left = Math.max(0, deadline - now());
-
-    if (ui.room.roomTimer) {
-      const minutes = String(Math.floor(left / 60000)).padStart(2, "0");
-      const seconds = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
-      text(ui.room.roomTimer, `${minutes}:${seconds}`);
-    }
-
-    if (left <= 0) {
-      stopRoomTimer();
-      if (typeof onExpire === "function") onExpire();
-    }
-  }, 1000);
 }
 
 function renderAuthState() {
   const signedIn = Boolean(state.user);
-
   if (signedIn) {
     hide(ui.screens.auth);
     show(ui.screens.profile);
@@ -3208,13 +2368,9 @@ function renderAuthState() {
     hide(ui.screens.admin);
     hide(ui.screens.history);
     hide(ui.screens.publicProfiles);
-    hide(ui.battle.screen);
-
-    if (state.isAdmin) show(ui.shell.openAdminBtn);
-    else hide(ui.shell.openAdminBtn);
-
-    if (ui.shell.openHistoryBtn) show(ui.shell.openHistoryBtn);
-    if (ui.shell.openPublicProfilesBtn) show(ui.shell.openPublicProfilesBtn);
+    if (state.isAdmin) show(ui.shell.openAdminBtn); else hide(ui.shell.openAdminBtn);
+    show(ui.shell.openHistoryBtn);
+    show(ui.shell.openPublicProfilesBtn);
   } else {
     show(ui.screens.auth);
     hide(ui.screens.profile);
@@ -3222,15 +2378,9 @@ function renderAuthState() {
     hide(ui.screens.admin);
     hide(ui.screens.history);
     hide(ui.screens.publicProfiles);
-    hide(ui.battle.screen);
-
     hide(ui.shell.openAdminBtn);
-    if (ui.shell.openHistoryBtn) hide(ui.shell.openHistoryBtn);
-    if (ui.shell.openPublicProfilesBtn) hide(ui.shell.openPublicProfilesBtn);
-  }
-
-  if (state.isBlocked) {
-    notifyError("Ваш аккаунт заблокирован администратором.");
+    hide(ui.shell.openHistoryBtn);
+    hide(ui.shell.openPublicProfilesBtn);
   }
 }
 
@@ -3241,7 +2391,6 @@ function setScreen(screenKey) {
   hide(ui.screens.admin);
   hide(ui.screens.history);
   hide(ui.screens.publicProfiles);
-  hide(ui.battle.screen);
 
   if (!state.user && screenKey !== "auth") {
     show(ui.screens.auth);
@@ -3252,9 +2401,9 @@ function setScreen(screenKey) {
   if (screenKey === "auth") show(ui.screens.auth);
   if (screenKey === "profile") show(ui.screens.profile);
   if (screenKey === "room") show(ui.screens.room);
-  if (screenKey === "admin" && state.isAdmin) show(ui.screens.admin);
   if (screenKey === "history") show(ui.screens.history);
   if (screenKey === "publicProfiles") show(ui.screens.publicProfiles);
+  if (screenKey === "admin" && state.isAdmin) show(ui.screens.admin);
 
   state.currentScreen = screenKey;
 }
@@ -3266,78 +2415,31 @@ function renderUserBadge() {
 
 function renderRoomBadge(roomCode = "", roomStatus = "") {
   if (!ui.shell.currentRoomBadge) return;
-
   const hasRoom = Boolean(roomCode);
   ui.shell.currentRoomBadge.classList.toggle("hidden", !hasRoom);
-
   if (!hasRoom) {
     text(ui.shell.currentRoomBadge, "✦ Комната: —");
     return;
   }
-
   const statusText = roomStatus ? ` · ${getRoomStatusLabel(roomStatus)}` : "";
   text(ui.shell.currentRoomBadge, `✦ Комната ${roomCode}${statusText}`);
 }
 
-function renderThemeSelector() {
-  if (!ui.shell.themeSelect) return;
-
-  ui.shell.themeSelect.innerHTML = `
-    <option value="${THEMES.crimsonNight.id}">${THEMES.crimsonNight.label}</option>
-    <option value="${THEMES.blackCherry.id}">${THEMES.blackCherry.label}</option>
-    <option value="${THEMES.amberNight.id}">${THEMES.amberNight.label}</option>
-    <option value="${THEMES.moonlight.id}">${THEMES.moonlight.label}</option>
-    <option value="${THEMES.frostLake.id}">${THEMES.frostLake.label}</option>
-    <option value="${THEMES.forestDweller.id}">${THEMES.forestDweller.label}</option>
-    <option value="${THEMES.heatherMist.id}">${THEMES.heatherMist.label}</option>
-  `;
-  ui.shell.themeSelect.value = state.activeTheme;
-}
-
-async function loadRecentFeedEntries() {
-  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
-  const snapshot = await get(feedQuery);
-
-  if (!snapshot.exists()) {
-    state.feedCache = [];
-    return [];
-  }
-
-  state.feedCache = Object.values(snapshot.val()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return state.feedCache;
-}
-
-function renderFeedTicker() {
-  if (!ui.shell.feedTicker) return;
-
-  if (!state.feedCache.length) {
-    ui.shell.feedTicker.innerHTML = `<span class="feed-empty">✦ Лента пока пустует.</span>`;
-    return;
-  }
-
-  ui.shell.feedTicker.innerHTML = state.feedCache
-    .slice(0, 10)
-    .map(item => `<span class="feed-item">✦ ${escapeHtml(item.text || "Событие")}</span>`)
-    .join("");
-}
-
 function renderCharacterSelect() {
   if (!ui.profile.activeCharacterSelect) return;
-
   const characters = getSortedCharacters();
   const activeId = state.userProfile?.activeCharacterId || "";
 
   if (!characters.length) {
     ui.profile.activeCharacterSelect.innerHTML = `<option value="">✦ Сначала добавь персонажа ✦</option>`;
+    text(ui.room.activeCharacterMirror, "—");
     return;
   }
 
-  ui.profile.activeCharacterSelect.innerHTML = characters
-    .map(character => {
-      const selected = character.id === activeId ? "selected" : "";
-      return `<option value="${escapeHtml(character.id)}" ${selected}>${escapeHtml(character.name)}</option>`;
-    })
-    .join("");
+  ui.profile.activeCharacterSelect.innerHTML = characters.map(character => {
+    const selected = character.id === activeId ? "selected" : "";
+    return `<option value="${escapeHtml(character.id)}" ${selected}>${escapeHtml(character.name)}</option>`;
+  }).join("");
 
   const selectedCharacter = getCharacterById(ui.profile.activeCharacterSelect.value);
   text(ui.room.activeCharacterMirror, selectedCharacter ? `✦ ${selectedCharacter.name}` : "✦ персонаж не выбран");
@@ -3345,13 +2447,8 @@ function renderCharacterSelect() {
 
 function buildUpgradeChips(upgrades) {
   const list = safeArray(upgrades);
-  if (!list.length) {
-    return `<div class="empty-inline">✦ Пока нет улучшений</div>`;
-  }
-
-  return list
-    .map(item => `<span class="upgrade-chip">${escapeHtml(item.label)}</span>`)
-    .join("");
+  if (!list.length) return `<div class="empty-inline">✦ Пока нет улучшений</div>`;
+  return list.map(item => `<span class="upgrade-chip">${escapeHtml(item.label)}</span>`).join("");
 }
 
 function buildCharacterStatsHtml(character) {
@@ -3361,17 +2458,7 @@ function buildCharacterStatsHtml(character) {
   const thresholds = getThresholdsForStatus(normalized.trainingStatus);
   const favoriteMove = getFavoriteMoveLabel(normalized);
   const accuracyPercent = getAccuracyPercent(normalized);
-
-  const warriorUpgrades = buildUpgradeChips(normalized.training.warriorUpgrades);
-  const apprenticeUpgrades = buildUpgradeChips(normalized.training.apprenticeUpgrades);
-  const pending = getPendingChoiceCount(normalized);
-  const canPromote = normalized.trainingStatus === "apprentice";
-
   const currentPool = getCurrentUpgradePool(normalized);
-  const accCount = getUpgradeCountByType(currentPool, "accuracy");
-  const dodgeCount = getUpgradeCountByType(currentPool, "dodge");
-  const clawCount = getUpgradeCountByType(currentPool, "clawPower");
-  const biteCount = getUpgradeCountByType(currentPool, "bitePower");
 
   return `
     <div class="character-detail-grid">
@@ -3379,15 +2466,15 @@ function buildCharacterStatsHtml(character) {
         <div class="character-detail-title">Боевой профиль</div>
         <div class="character-detail-row"><span>Шанс попадания</span><strong>${combat.accuracy}%</strong></div>
         <div class="character-detail-row"><span>Шанс уворота</span><strong>${combat.dodge}%</strong></div>
-        <div class="character-detail-row"><span>Удар когтями</span><strong>${combat.clawPower}%</strong></div>
-        <div class="character-detail-row"><span>Укус</span><strong>${combat.bitePower}%</strong></div>
+        <div class="character-detail-row"><span>Удар лапой</span><strong>${combat.clawPower}%</strong></div>
+        <div class="character-detail-row"><span>Подсечка</span><strong>${combat.bitePower}%</strong></div>
       </div>
 
       <div class="character-detail-block">
-        <div class="character-detail-title">Тренировочный прогресс</div>
+        <div class="character-detail-title">Прогресс</div>
         <div class="character-detail-row"><span>Победы до улучшения</span><strong>${progress.winsTowardUpgrade} / ${thresholds.wins}</strong></div>
         <div class="character-detail-row"><span>Поражения до улучшения</span><strong>${progress.lossesTowardUpgrade} / ${thresholds.losses}</strong></div>
-        <div class="character-detail-row"><span>Доступно выбрать</span><strong>${pending}</strong></div>
+        <div class="character-detail-row"><span>Доступно улучшений</span><strong>${getPendingChoiceCount(normalized)}</strong></div>
         <div class="character-detail-row"><span>Последний зачёт</span><strong>${escapeHtml(formatDate(progress.lastCreditedAt))}</strong></div>
       </div>
 
@@ -3400,1604 +2487,732 @@ function buildCharacterStatsHtml(character) {
       </div>
     </div>
 
-    <div class="character-detail-grid">
-      <div class="character-detail-block">
-        <div class="character-detail-title">Ветки усилений</div>
-        <div class="character-detail-row"><span>Попадание</span><strong>${accCount} / 5</strong></div>
-        <div class="character-detail-row"><span>Уворот</span><strong>${dodgeCount} / 5</strong></div>
-        <div class="character-detail-row"><span>Когти</span><strong>${clawCount} / 5</strong></div>
-        <div class="character-detail-row"><span>Укус</span><strong>${biteCount} / 5</strong></div>
-      </div>
-
-      <div class="character-detail-block">
-        <div class="character-detail-title">История улучшений</div>
-        ${
-          safeArray(normalized.training.upgradeHistory).length
-            ? safeArray(normalized.training.upgradeHistory).slice(0, 5).map(item => `
-              <div class="character-detail-row">
-                <span>${escapeHtml(item.label || "—")}</span>
-                <strong>${escapeHtml(formatDate(item.createdAt))}</strong>
-              </div>
-            `).join("")
-            : `<div class="empty-inline">✦ Пока нет записей</div>`
-        }
-      </div>
-    </div>
-
     <div class="character-upgrades-wrap">
       <div class="character-upgrades-block">
-        <div class="character-detail-title">Улучшения воителя</div>
-        <div class="upgrade-chip-list">${warriorUpgrades}</div>
+        <div class="character-detail-title">Активные улучшения</div>
+        <div class="upgrade-chip-list">${buildUpgradeChips(currentPool)}</div>
       </div>
-
       <div class="character-upgrades-block">
-        <div class="character-detail-title">Улучшения оруженосца</div>
-        <div class="upgrade-chip-list">${apprenticeUpgrades}</div>
+        <div class="character-detail-title">Все ветки</div>
+        <div class="character-detail-row"><span>Попадание</span><strong>${getUpgradeCountByType(currentPool, "accuracy")} / 5</strong></div>
+        <div class="character-detail-row"><span>Уворот</span><strong>${getUpgradeCountByType(currentPool, "dodge")} / 5</strong></div>
+        <div class="character-detail-row"><span>Лапа</span><strong>${getUpgradeCountByType(currentPool, "clawPower")} / 5</strong></div>
+        <div class="character-detail-row"><span>Подсечка</span><strong>${getUpgradeCountByType(currentPool, "bitePower")} / 5</strong></div>
       </div>
-    </div>
-
-    <div class="character-owner-note-box">
-      <div class="character-detail-title">Личная заметка владельца</div>
-      <div class="character-owner-note-text">${escapeHtml(normalized.ownerNote || "Пока пусто.")}</div>
-    </div>
-
-    <div class="character-actions-extra">
-      ${pending > 0 ? `<button type="button" class="choose-upgrade-btn" data-character-id="${escapeHtml(character.id)}">Выбрать улучшение (${pending})</button>` : ""}
-      ${canPromote ? `<button type="button" class="promote-character-btn" data-character-id="${escapeHtml(character.id)}">Меня посвятили в воители</button>` : ""}
     </div>
   `;
-}
-
-function isCharacterCardExpanded(characterId) {
-  return Boolean(state.expandedCharacterCards?.[characterId]);
-}
-
-function toggleCharacterCardExpanded(characterId) {
-  state.expandedCharacterCards[characterId] = !state.expandedCharacterCards[characterId];
-}
-
-function renderCharactersList() {
-  if (!ui.profile.charactersList) return;
-
-  const searchValue = (ui.profile.characterSearchInput?.value || "").trim().toLowerCase();
-  const characters = getSortedCharacters().filter(character =>
-    !searchValue || String(character.name || "").toLowerCase().includes(searchValue)
-  );
-
-  if (!characters.length) {
-    ui.profile.charactersList.innerHTML = `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">Персонажи не найдены.</div>
-      </div>
-    `;
-    return;
-  }
-
-  const activeId = state.userProfile?.activeCharacterId || "";
-
-  ui.profile.charactersList.innerHTML = characters
-    .map(character => {
-      const isActive = character.id === activeId;
-      const isApprentice = character.trainingStatus === "apprentice";
-      const progress = character.training.progress;
-      const pending = getPendingChoiceCount(character);
-      const expanded = isCharacterCardExpanded(character.id);
-
-      return `
-  <article class="character-card ${isApprentice ? "character-card-apprentice" : "character-card-warrior"} ${expanded ? "character-card-expanded" : "character-card-collapsed"}" data-character-id="${escapeHtml(character.id)}">
-    <div class="character-card-top">
-      <div class="character-card-main">
-        <div class="character-card-name">${escapeHtml(character.name || "Без имени")}</div>
-        <div class="character-card-meta">
-          ${escapeHtml(character.clan || "Без племени")} ◈ ${escapeHtml(getTrainingStatusLabel(character.trainingStatus))}
-        </div>
-      </div>
-      <div class="character-card-badge">${isActive ? "✦ выбран" : "◈ доступен"}</div>
-    </div>
-
-    <div class="character-card-summary">
-      До улучшения: ${progress.winsTowardUpgrade}/${getThresholdsForStatus(character.trainingStatus).wins} побед · ${progress.lossesTowardUpgrade}/${getThresholdsForStatus(character.trainingStatus).losses} поражений
-    </div>
-
-    <div class="character-card-toggle-row">
-      <button type="button" class="character-toggle-btn" data-character-id="${escapeHtml(character.id)}">
-        ${expanded ? "Свернуть" : "Развернуть"}
-      </button>
-    </div>
-
-    <div class="character-card-collapsible ${expanded ? "is-open" : ""}">
-      <div class="fancy-stats-grid">
-        <div class="fancy-stat">
-          <span>Победы</span>
-          <strong>${character.profileStats.wins}</strong>
-        </div>
-        <div class="fancy-stat">
-          <span>Поражения</span>
-          <strong>${character.profileStats.losses}</strong>
-        </div>
-        <div class="fancy-stat">
-          <span>Ничьи</span>
-          <strong>${character.profileStats.draws}</strong>
-        </div>
-        <div class="fancy-stat">
-          <span>Улучшения</span>
-          <strong>${pending}</strong>
-        </div>
-      </div>
-
-      ${buildCharacterStatsHtml(character)}
-
-      <div class="character-card-actions">
-        <button type="button" class="set-active-character-btn" data-character-id="${escapeHtml(character.id)}">Сделать активным</button>
-        <button type="button" class="edit-character-btn" data-character-id="${escapeHtml(character.id)}">Редактировать</button>
-        <button type="button" class="delete-character-btn" data-character-id="${escapeHtml(character.id)}">Удалить</button>
-      </div>
-    </div>
-  </article>
-`;
-    })
-    .join("");
 }
 
 function renderProfile() {
-  if (!state.userProfile) return;
-
-  text(ui.profile.name, state.userProfile.displayName || "Зенит");
-  text(ui.profile.statusText, state.userProfile.status || "✦ Наблюдает за бабочками");
-  text(ui.profile.portraitInitials, state.userProfile.portraitSymbol || "✦");
-
-  if (ui.profile.statusInput) ui.profile.statusInput.value = state.userProfile.status || "";
-  if (ui.profile.symbolSelect) ui.profile.symbolSelect.value = state.userProfile.portraitSymbol || "✦";
-
-  renderUserBadge();
-  renderCharacterSelect();
-  renderCharactersList();
-
-  const activeCharacter = getCharacterById(getSelectedCharacterId());
+  const profile = state.userProfile || createDefaultProfile("Зенит");
+  text(ui.profile.name, profile.displayName || "Зенит");
+  text(ui.profile.statusText, profile.status || "✦ Наблюдает за бабочками");
+  if (ui.profile.statusInput) ui.profile.statusInput.value = profile.status || "";
+  if (ui.profile.symbolSelect) ui.profile.symbolSelect.value = profile.portraitSymbol || "✦";
+  text(ui.profile.portraitInitials, profile.portraitSymbol || getInitials(profile.displayName));
+  text(ui.room.playerNameMirror, profile.displayName || "—");
   if (ui.profile.ownerNoteInput) {
-    ui.profile.ownerNoteInput.value = activeCharacter?.ownerNote || "";
+    const selected = getCharacterById(getSelectedCharacterId());
+    ui.profile.ownerNoteInput.value = selected?.ownerNote || "";
   }
-}
 
-function setRoomStatus(value) {
-  text(ui.room.statusLog, value);
-}
+  renderCharacterSelect();
 
-function renderRoomIdleState() {
-  renderRoomBadge();
-  text(ui.room.playerNameMirror, state.userProfile?.displayName || "—");
+  const queryText = (ui.profile.characterSearchInput?.value || "").trim().toLowerCase();
+  const characters = getSortedCharacters().filter(character => !queryText || character.name.toLowerCase().includes(queryText));
 
-  const activeCharacter = getCharacterById(getSelectedCharacterId());
-  text(ui.room.activeCharacterMirror, activeCharacter ? `✦ ${activeCharacter.name}` : "✦ персонаж не выбран");
-
-  html(ui.room.roomPlayers, `
-    <div class="empty-state-card">
-      <div class="empty-state-mark">✦</div>
-      <div class="empty-state-text">Пока вы не подключены ни к одной комнате.</div>
-    </div>
-  `);
-
-  html(ui.room.roomMeta, `
-    <div class="room-meta-line">◈ Статус: ожидание</div>
-    <div class="room-meta-line">◈ Комната: —</div>
-  `);
-
-  text(ui.room.creditBadge, "Зачёт ещё не рассчитан");
-text(ui.room.creditReasonBox, "Создай комнату или войди в уже существующую, чтобы увидеть условия зачёта.");
-  html(ui.room.waitingStateBox, "");
-  html(ui.room.roomResultCard, "");
-  if (ui.room.roomTimer) text(ui.room.roomTimer, "00:00");
-
-  setRoomStatus("Пока ничего не происходит.");
-  hide(ui.battle.screen);
-  stopRoomTimer();
-}
-
-function showBattleMainActions() {
-  show(ui.battle.actions);
-  hide(ui.battle.attackMenu);
-  hide(ui.battle.targetMenu);
-}
-
-function showBattleAttackMenu() {
-  hide(ui.battle.actions);
-  show(ui.battle.attackMenu);
-  hide(ui.battle.targetMenu);
-}
-
-function showBattleTargetMenu() {
-  hide(ui.battle.actions);
-  hide(ui.battle.attackMenu);
-  show(ui.battle.targetMenu);
-}
-
-function setBattleButtonsDisabled(disabled, canDefend = false) {
-  disable(ui.battle.attackActionBtn, disabled);
-  disable(ui.battle.defendActionBtn, disabled || !canDefend);
-  disable(ui.battle.escapeActionBtn, disabled);
-
-  disable(ui.battle.sandAttackBtn, disabled);
-  disable(ui.battle.pawAttackBtn, disabled);
-  disable(ui.battle.tripAttackBtn, disabled);
-  disable(ui.battle.backToActionsBtn, disabled);
-
-  disable(ui.battle.faceTargetBtn, disabled);
-  disable(ui.battle.frontLeftTargetBtn, disabled);
-  disable(ui.battle.frontRightTargetBtn, disabled);
-  disable(ui.battle.sideTargetBtn, disabled);
-  disable(ui.battle.earsTargetBtn, disabled);
-  disable(ui.battle.neckTargetBtn, disabled);
-  disable(ui.battle.backToAttackMenuBtn, disabled);
-}
-
-function createBarHtml(label, value, visible = true) {
-  const width = clamp(Number(value || 0), 0, 100);
-  return `
-    <div class="battle-bar-card">
-      <div class="battle-bar-top">
-        <span>${escapeHtml(label)}</span>
-        <strong>${visible ? `${width}%` : "скрыто"}</strong>
-      </div>
-      <div class="battle-bar-track">
-        <div class="battle-bar-fill" style="width:${visible ? width : 100}%"></div>
-      </div>
-    </div>
-  `;
-}
-
-function setBattleLog(logItems) {
-  if (!ui.battle.log) return;
-
-  const list = safeArray(logItems);
-
-  if (!list.length) {
-    ui.battle.log.innerHTML = `
-      <div class="battle-log-empty">
-        <span class="battle-log-empty-mark">✦</span>
-        <span>Пока нет записей.</span>
-      </div>
-    `;
-    state.lastRenderedLogLength = 0;
+  if (!characters.length) {
+    ui.profile.charactersList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Добавь первого персонажа.</div></div>`;
     return;
   }
 
-  const oldLength = state.lastRenderedLogLength;
-  ui.battle.log.innerHTML = list.map((item, index) => {
-    const isNew = index >= oldLength;
-    const isLatest = index === list.length - 1;
-    const mark = isLatest ? "✦" : "•";
-    return `
-      <div class="battle-log-entry ${isNew ? "battle-log-entry-new" : ""} ${isLatest ? "battle-log-entry-latest" : ""}">
-        <div class="battle-log-mark">${mark}</div>
-        <div class="battle-log-text">${escapeHtml(String(item))}</div>
-      </div>
-    `;
-  }).join("");
-
-  if (list.length > oldLength) {
-    ui.battle.log.scrollTop = ui.battle.log.scrollHeight;
-  }
-
-  state.lastRenderedLogLength = list.length;
-}
-
-function renderRoomPlayers(room) {
-  const host = room.players?.host;
-  const guest = room.players?.guest;
-  const ready = normalizeReadyState(room.readyState);
-
-  ui.room.roomPlayers.innerHTML = `
-    <div class="room-players-grid">
-      <div class="room-player-card">
-        <div class="room-player-label">✦ Игрок 1</div>
-        <div class="room-player-name">${escapeHtml(host?.profileName || "—")}</div>
-        <div class="room-player-character">${escapeHtml(host?.characterName || "—")}</div>
-        <div class="room-player-ready">${ready.host ? "Готов" : "Не готов"}</div>
-      </div>
-
-      <div class="room-player-card">
-        <div class="room-player-label">✦ Игрок 2</div>
-        <div class="room-player-name">${escapeHtml(guest?.profileName || "—")}</div>
-        <div class="room-player-character">${escapeHtml(guest?.characterName || "Ожидание второго игрока")}</div>
-        <div class="room-player-ready">${ready.guest ? "Готов" : "Не готов"}</div>
-      </div>
-    </div>
-  `;
-
-  ui.room.roomMeta.innerHTML = `
-    <div class="room-meta-line">◈ Комната: ${escapeHtml(room.code || state.currentRoomCode || "—")}</div>
-    <div class="room-meta-line">◈ Статус: ${escapeHtml(getRoomStatusLabel(room.status))}</div>
-  `;
-}
-
-function renderCreditPreview(room) {
-  const preview = room.creditPreview || {
-    badge: "Зачёта не будет",
-    reason: "Недостаточно данных."
-  };
-
-  text(ui.room.creditBadge, preview.badge || "Зачёта не будет");
-  text(ui.room.creditReasonBox, preview.reason || "—");
-}
-
-function renderWaitingState(room) {
-  const ready = normalizeReadyState(room.readyState);
-  let timerText = "";
-
-  if (room.status === "ready" && (ready.host || ready.guest)) {
-    const left = getReadyCountdownLeft(room);
-    const minutes = String(Math.floor(left / 60000)).padStart(2, "0");
-    const seconds = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
-    timerText = `⌛ Сброс готовности через ${minutes}:${seconds}`;
-  }
-
-  if (room.status === "waiting") {
-    ui.room.waitingStateBox.innerHTML = `
-      <div class="waiting-pretty-card">
-        <div class="waiting-pretty-title">✦ Комната открыта</div>
-        <div class="waiting-pretty-text">Тренировка ещё не может начаться. Нужен второй игрок.</div>
-      </div>
-    `;
-    return;
-  }
-
-  if (room.status === "ready") {
-    ui.room.waitingStateBox.innerHTML = `
-      <div class="waiting-pretty-card">
-        <div class="waiting-pretty-title">✦ Подтверждение готовности</div>
-        <div class="waiting-pretty-text">Как только оба игрока отметятся готовыми, тренировка стартует автоматически.</div>
-        <div class="waiting-pretty-timer">${escapeHtml(timerText || "⌛ Ожидание готовности")}</div>
-      </div>
-    `;
-    return;
-  }
-
-  ui.room.waitingStateBox.innerHTML = "";
-}
-
-function getDodgePipsHtml(dodgesLeft) {
-  return Array.from({ length: MAX_DODGES }, (_, index) => {
-    const active = index < dodgesLeft;
-    return `<span class="battle-dodge-pip ${active ? "is-active" : ""}">✦</span>`;
-  }).join("");
-}
-
-function renderRoomResultCard(room) {
-  if (room.status !== "finished") {
-    ui.room.roomResultCard.innerHTML = "";
-    return;
-  }
-
-  const preview = room.creditPreview || {};
-  const battle = room.battle ? normalizeBattle(room.battle) : null;
-  const finishInfo = room.finishInfo || {};
-
-  let winnerName = "Ничья";
-  if (battle?.winner) {
-    winnerName = battle.playerNames[battle.winner] || "—";
-  } else if (finishInfo.type === RESULT_TYPES.UNFINISHED) {
-    winnerName = "Не определён";
-  }
-
-  const myRole = state.currentPlayerRole;
-  let myCreditText = "—";
-
-  if (myRole === "host") {
-    myCreditText = preview.hostGetsCredit ? "Зачёт выдан" : "Зачёт не выдан";
-  } else if (myRole === "guest") {
-    myCreditText = preview.guestGetsCredit ? "Зачёт выдан" : "Зачёт не выдан";
-  }
-
-  ui.room.roomResultCard.innerHTML = `
-    <div class="result-pretty-card">
-      <div class="result-pretty-title">✦ Итог тренировки</div>
-      <div class="result-pretty-grid">
-        <div class="result-pretty-item"><span>Победитель</span><strong>${escapeHtml(winnerName)}</strong></div>
-        <div class="result-pretty-item"><span>Ваш зачёт</span><strong>${escapeHtml(myCreditText)}</strong></div>
-        <div class="result-pretty-item"><span>Причина</span><strong>${escapeHtml(preview.reason || battle?.lastMessage || finishInfo.reason || "—")}</strong></div>
-        <div class="result-pretty-item"><span>Завершено</span><strong>${escapeHtml(formatDate(battle?.completedAt || finishInfo.completedAt || room.finishedAt || 0))}</strong></div>
-      </div>
-
-      ${
-        battle
-          ? `<div class="result-pretty-bars">
-              ${createBarHtml(battle.playerNames.host, battle.hostHp, true)}
-              ${createBarHtml(battle.playerNames.guest, battle.guestHp, true)}
-            </div>`
-          : ""
-      }
-    </div>
-  `;
-}
-
-function renderBattleForPlayer(room, battle) {
-  const myRole = state.currentPlayerRole;
-  const enemyRole = myRole ? getOtherRole(myRole) : null;
-  const myEffects = myRole ? battle.effects[myRole] : createDefaultEffects();
-  const mySelection = myRole ? battle.selections[myRole] : null;
-  const enemySelection = enemyRole ? battle.selections[enemyRole] : null;
-  const canChoose = room.status === "battle" && myRole && !mySelection && myEffects.stunTurns <= 0;
-  const canDefend = canChoose && myEffects.dodgesLeft > 0;
-
-  let visibleMessage = battle.lastMessage || "Тренировка началась.";
-
-  if (room.status === "battle") {
-    if (mySelection?.type === "stunned") {
-      visibleMessage = `${battle.lastMessage || "Предыдущий ход завершён."}\n\nВы оглушены и автоматически пропускаете этот ход.`;
-    } else if (mySelection) {
-      visibleMessage = `${battle.lastMessage || "Предыдущий ход завершён."}\n\nВаше действие выбрано: ${getSelectionLabel(mySelection)}. Ожидание соперника.`;
-    } else {
-      visibleMessage = `${battle.lastMessage || "Тренировка началась."}\n\nВыберите действие на ход ${battle.turnNumber}.`;
-    }
-  }
-
-  const selectedActionChip = mySelection
-    ? `<div class="battle-chip battle-chip-selected">◈ Ваш выбор: ${escapeHtml(getSelectionLabel(mySelection))}</div>`
-    : `<div class="battle-chip battle-chip-soft">◈ Выбор ещё не сделан</div>`;
-
-  let effectsHtml = "";
-
-  if (myEffects.accuracyPenaltyTurns > 0) {
-    effectsHtml += `
-      <div class="battle-effect">
-        <div class="battle-effect-title">Штраф к попаданию</div>
-        <div class="battle-effect-text">−10% ещё на ${myEffects.accuracyPenaltyTurns} ход(а)</div>
-      </div>
-    `;
-  }
-
-  if (myEffects.stunTurns > 0) {
-    effectsHtml += `
-      <div class="battle-effect">
-        <div class="battle-effect-title">Оглушение</div>
-        <div class="battle-effect-text">Этот ход будет пропущен</div>
-      </div>
-    `;
-  }
-
-  ui.battle.info.innerHTML = `
-    <div class="battle-status-shell">
-      <div class="battle-status-top">
-        <div class="battle-chip battle-chip-active">✦ Ход ${battle.turnNumber}</div>
-        <div class="battle-chip">◈ Ваш персонаж: ${escapeHtml(battle.playerNames[myRole] || "—")}</div>
-        <div class="battle-chip">◈ Соперник: ${escapeHtml(battle.playerNames[enemyRole] || "—")}</div>
-        ${selectedActionChip}
-      </div>
-
-      <div class="battle-bars-wrap">
-        ${createBarHtml("Ваши очки спарринга", myRole ? getHp(battle, myRole) : 0, true)}
-        ${room.status === "finished"
-          ? createBarHtml("Очки соперника", enemyRole ? getHp(battle, enemyRole) : 0, true)
-          : createBarHtml("Очки соперника", 100, false)}
-      </div>
-
-      <div class="battle-stats-grid">
-        <div class="battle-stat">
-          <div class="battle-stat-label">Кровотечение</div>
-          <div class="battle-stat-value">−${myEffects.dotDamage}% за ход</div>
-        </div>
-        <div class="battle-stat">
-          <div class="battle-stat-label">Увороты</div>
-          <div class="battle-dodge-pips">${getDodgePipsHtml(myEffects.dodgesLeft)}</div>
-          <div class="battle-stat-subtext">Осталось: ${myEffects.dodgesLeft} из ${MAX_DODGES}</div>
-        </div>
-      </div>
-
-      ${effectsHtml ? `<div class="battle-effects-grid">${effectsHtml}</div>` : ""}
-
-      <div class="battle-message">
-        <div class="battle-message-title">✦ Состояние хода</div>
-        <div class="battle-message-text">${escapeHtml(visibleMessage).replace(/\n/g, "<br>")}</div>
-      </div>
-    </div>
-  `;
-
-  if (ui.battle.opponentChosenBadge) {
-    text(ui.battle.opponentChosenBadge, enemySelection ? "Соперник уже выбрал действие" : "Соперник ещё думает");
-  }
-
-  setBattleLog(battle.log);
-  setBattleButtonsDisabled(!canChoose, canDefend);
-  showBattleMainActions();
-}
-
-function renderBattleForAdmin(room, battle) {
-  ui.battle.info.innerHTML = `
-    <div class="battle-status-shell">
-      <div class="battle-status-top">
-        <div class="battle-chip battle-chip-active">✦ Ход ${battle.turnNumber}</div>
-        <div class="battle-chip">◈ Наблюдение администратора</div>
-      </div>
-
-      <div class="battle-bars-wrap">
-        ${createBarHtml(battle.playerNames.host, battle.hostHp, true)}
-        ${createBarHtml(battle.playerNames.guest, battle.guestHp, true)}
-      </div>
-
-      <div class="battle-message">
-        <div class="battle-message-title">✦ Текущее состояние</div>
-        <div class="battle-message-text">${escapeHtml(battle.lastMessage || "—")}</div>
-      </div>
-    </div>
-  `;
-
-  setBattleLog(battle.log);
-  setBattleButtonsDisabled(true, false);
-  showBattleMainActions();
-}
-
-async function maybeShowRoomRules(roomCode) {
-  if (!roomCode || !state.currentPlayerRole) return;
-  if (hasReadRulesForRoom(roomCode)) return;
-  if (state.modalResolver) return;
-
-  const accepted = await openInfoModal({
-    title: "Правила тренировки",
-    bodyHtml: getRoomRulesHtml(),
-    confirmLabel: "Я понял",
-    allowClose: false
-  });
-
-  if (accepted) {
-    markRulesReadForRoom(roomCode);
-  }
-}
-
-async function ensureForcedRoundState(roomCode) {
-  if (!roomCode || state.syncingForcedRound) return;
-  state.syncingForcedRound = true;
-
-  try {
-    const roomRef = ref(db, getRoomPath(roomCode));
-
-    await runTransaction(roomRef, room => {
-      if (!room || room.status !== "battle") return room;
-
-      const battle = normalizeBattle(room.battle);
-      const changed = applyForcedSelectionsForRound(battle);
-      if (!changed) return room;
-
-      if (isRoundReady(battle)) {
-        const resolved = resolveRound(battle);
-        room.battle = resolved.battle;
-        room.status = resolved.status;
-
-        if (resolved.status === "finished") {
-          room.finishInfo = {
-            type: resolved.battle.winner ? "finished" : RESULT_TYPES.DRAW,
-            reason: resolved.battle.finishReason || "",
-            completedAt: resolved.battle.completedAt || now()
-          };
-        }
-
-        return room;
-      }
-
-      room.battle = battle;
-      return room;
-    });
-  } finally {
-    state.syncingForcedRound = false;
-  }
-}
-
-async function ensureRoomTimeouts(roomCode, room) {
-  if (!roomCode || !room) return;
-
-  if (room.status === "ready") {
-    const ready = normalizeReadyState(room.readyState);
-    const hasReady = ready.host || ready.guest;
-
-    if (hasReady && getReadyCountdownLeft(room) <= 0) {
-      await update(ref(db, getRoomPath(roomCode)), {
-        readyState: createEmptyReadyState()
-      });
-      notify("Готовность сброшена из-за бездействия.");
-    }
-  }
-
-  if (room.status === "battle") {
-    if (getBattleCountdownLeft(room) <= 0) {
-      await finishBattleAsUnfinished(roomCode, "Тренировка завершена из-за 10 минут бездействия.");
-      notify("Тренировка мягко завершена из-за бездействия.");
-    }
-  }
-}
-
-function renderRoom(roomCode, room) {
-  if (!room) {
-    renderRoomIdleState();
-    return;
-  }
-
-  state.currentRoomCode = roomCode;
-  renderRoomBadge(roomCode, room.status);
-  renderRoomPlayers(room);
-  renderCreditPreview(room);
-  renderWaitingState(room);
-  renderRoomResultCard(room);
-
-  const lines = [
-    `Код комнаты: ${roomCode}`,
-    `Статус: ${getRoomStatusLabel(room.status)}`,
-    `Игрок 1: ${room.players?.host?.characterName || "—"}`,
-    `Игрок 2: ${room.players?.guest?.characterName || "—"}`
-  ];
-
-  if (room.status === "waiting") {
-    lines.push("Ожидание второго игрока...");
-    setRoomStatus(lines.join("\n"));
-    hide(ui.battle.screen);
-    state.currentBattleTurnNumber = null;
-    stopRoomTimer();
-    if (ui.room.roomTimer) text(ui.room.roomTimer, "00:00");
-    return;
-  }
-
-  if (room.status === "ready") {
-    lines.push("Оба игрока в комнате. Нужна готовность.");
-    setRoomStatus(lines.join("\n"));
-    hide(ui.battle.screen);
-    state.currentBattleTurnNumber = null;
-
-    const left = getReadyCountdownLeft(room);
-    if (left > 0) startRoomTimer(now() + left, () => {});
-    else {
-      stopRoomTimer();
-      if (ui.room.roomTimer) text(ui.room.roomTimer, "00:00");
-    }
-    return;
-  }
-
-  const battle = room.battle ? normalizeBattle(room.battle) : null;
-  state.currentBattleTurnNumber = battle?.turnNumber || null;
-
-  if (battle) {
-    show(ui.battle.screen);
-  } else {
-    hide(ui.battle.screen);
-  }
-
-  if (room.status === "battle" && battle) {
-    ensureForcedRoundState(roomCode);
-    lines.push("Тренировка идёт.");
-    const left = getBattleCountdownLeft(room);
-    if (left > 0) startRoomTimer(now() + left, () => {});
-    else stopRoomTimer();
-  }
-
-  if (room.status === "finished") {
-    lines.push("Тренировка завершена.");
-    stopRoomTimer();
-    if (ui.room.roomTimer) text(ui.room.roomTimer, "00:00");
-  }
-
-  if (battle) {
-    const amISpectator = !state.currentPlayerRole || !["host", "guest"].includes(state.currentPlayerRole);
-    if (amISpectator && state.isAdmin) renderBattleForAdmin(room, battle);
-    else renderBattleForPlayer(room, battle);
-  }
-
-  setRoomStatus(lines.join("\n"));
-}
-
-async function renderMyTrainingHistory() {
-  if (!ui.history.list || !state.user) return;
-
-  const snapshot = await get(ref(db, "trainingHistory"));
-
-  if (!snapshot.exists()) {
-    ui.history.list.innerHTML = `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">История тренировок пока пуста.</div>
-      </div>
-    `;
-    return;
-  }
-
-  const all = Object.entries(snapshot.val())
-    .map(([id, value]) => ({ id, ...value }))
-    .filter(item => item.hostUid === state.user.uid || item.guestUid === state.user.uid)
-    .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
-
-  if (!all.length) {
-    ui.history.list.innerHTML = `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">У вас пока нет завершённых тренировок.</div>
-      </div>
-    `;
-    return;
-  }
-
-  const groups = {};
-  all.forEach(item => {
-    const ownRole = item.hostUid === state.user.uid ? "host" : "guest";
-    const groupKey = ownRole === "host"
-      ? `${item.hostCharacterId}_${item.hostCharacterName}`
-      : `${item.guestCharacterId}_${item.guestCharacterName}`;
-
-    if (!groups[groupKey]) groups[groupKey] = [];
-    groups[groupKey].push(item);
-  });
-
-  ui.history.list.innerHTML = Object.entries(groups)
-    .map(([groupKey, entries]) => {
-      const [, characterName] = groupKey.split("_");
-      return `
-        <section class="history-character-section">
-          <h3>${escapeHtml(characterName)}</h3>
-          <div class="history-character-list">
-            ${entries.map(entry => `
-              <article class="history-item-card">
-                <div class="history-item-top">
-                  <div class="history-item-title">${escapeHtml(entry.hostCharacterName)} ⟡ ${escapeHtml(entry.guestCharacterName)}</div>
-                  <div class="history-item-date">${escapeHtml(formatDate(entry.finishedAt))}</div>
-                </div>
-                <div class="history-item-meta">${escapeHtml(entry.creditReason || "—")}</div>
-                <div class="history-item-result">${escapeHtml(entry.lastMessage || "—")}</div>
-              </article>
-            `).join("")}
-          </div>
-        </section>
-      `;
-    })
-    .join("");
-}
-
-async function loadAllPublicCharacters() {
-  const snapshot = await get(ref(db, "users"));
-
-  if (!snapshot.exists()) {
-    state.publicCharactersCache = [];
-    return [];
-  }
-
-  const users = snapshot.val();
-  const result = [];
-
-  Object.entries(users).forEach(([uid, payload]) => {
-    const profile = payload?.profile || {};
-    const characters = payload?.characters || {};
-
-    Object.entries(characters).forEach(([characterId, character]) => {
-      result.push({
-        uid,
-        profileName: profile.displayName || "Без имени",
-        characterId,
-        ...normalizeCharacter(character)
-      });
-    });
-  });
-
-  state.publicCharactersCache = result.sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
-  return state.publicCharactersCache;
-}
-
-function renderPublicProfilesList() {
-  if (!ui.publicProfiles.list) return;
-
-  const searchValue = (ui.publicProfiles.searchInput?.value || "").trim().toLowerCase();
-  const items = state.publicCharactersCache.filter(item =>
-    !searchValue || String(item.name || "").toLowerCase().includes(searchValue)
-  );
-
-  if (!items.length) {
-    ui.publicProfiles.list.innerHTML = `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">Персонажи не найдены.</div>
-      </div>
-    `;
-    return;
-  }
-
-  ui.publicProfiles.list.innerHTML = items.map(item => `
-    <article class="public-character-card" data-public-uid="${escapeHtml(item.uid)}" data-public-character-id="${escapeHtml(item.characterId)}">
-      <div class="public-character-name">${escapeHtml(item.name)}</div>
-      <div class="public-character-meta">${escapeHtml(item.clan || "Без племени")} ◈ ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
-      <div class="public-character-owner">Игрок: ${escapeHtml(item.profileName || "—")}</div>
-    </article>
-  `).join("");
-}
-
-function renderPublicProfileDetails(uid, characterId) {
-  if (!ui.publicProfiles.details) return;
-
-  const character = state.publicCharactersCache.find(item => item.uid === uid && item.characterId === characterId);
-
-  if (!character) {
-    ui.publicProfiles.details.innerHTML = `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">Выберите персонажа слева.</div>
-      </div>
-    `;
-    return;
-  }
-
-  const combat = getCombatViewTotals(character);
-  const progress = character.training.progress;
-
-  ui.publicProfiles.details.innerHTML = `
-    <div class="public-profile-card">
-      <div class="public-profile-name">${escapeHtml(character.name)}</div>
-      <div class="public-profile-meta">${escapeHtml(character.clan || "Без племени")} ◈ ${escapeHtml(getTrainingStatusLabel(character.trainingStatus))}</div>
-      <div class="public-profile-owner">Игрок: ${escapeHtml(character.profileName || "—")}</div>
-
-      <div class="public-profile-grid">
-        <div class="public-profile-stat"><span>Шанс попадания</span><strong>${combat.accuracy}%</strong></div>
-        <div class="public-profile-stat"><span>Шанс уворота</span><strong>${combat.dodge}%</strong></div>
-        <div class="public-profile-stat"><span>Удар когтями</span><strong>${combat.clawPower}%</strong></div>
-        <div class="public-profile-stat"><span>Укус</span><strong>${combat.bitePower}%</strong></div>
-        <div class="public-profile-stat"><span>Любимый приём</span><strong>${escapeHtml(getFavoriteMoveLabel(character))}</strong></div>
-        <div class="public-profile-stat"><span>Точность</span><strong>${getAccuracyPercent(character)}%</strong></div>
-        <div class="public-profile-stat"><span>Последний зачёт</span><strong>${escapeHtml(formatDate(progress.lastCreditedAt))}</strong></div>
-        <div class="public-profile-stat"><span>Последний соперник</span><strong>${escapeHtml(progress.lastCreditedOpponentName || "—")}</strong></div>
-      </div>
-
-      <div class="public-profile-upgrades">
-        <div class="public-profile-block-title">Улучшения</div>
-        <div class="upgrade-chip-list">${buildUpgradeChips(character.trainingStatus === "apprentice" ? character.training.apprenticeUpgrades : character.training.warriorUpgrades)}</div>
-      </div>
-    </div>
-  `;
-}
-
-function flattenUsersCharacters() {
-  return Object.entries(state.adminUsersCache || {}).flatMap(([uid, payload]) => {
-    const profile = payload?.profile || {};
-    const characters = payload?.characters || {};
-
-    return Object.entries(characters).map(([characterId, character]) => ({
-      uid,
-      profileName: profile.displayName || "—",
-      characterId,
-      ...normalizeCharacter(character)
-    }));
-  });
-}
-
-async function openAdminProfileEditModal(profile) {
-  const current = profile || {};
-
-  const result = await openModal({
-    title: "Редактирование профиля",
-    text: "Измени имя и статус игрока.",
-    bodyHtml: `
-      <div class="zenith-input-stack">
-        <label class="zenith-input-label">
-          <span>Имя профиля</span>
-          <input id="zenithModalProfileName" type="text" value="${escapeHtml(current.displayName || "")}" />
-        </label>
-        <label class="zenith-input-label">
-          <span>Статус</span>
-          <input id="zenithModalProfileStatus" type="text" value="${escapeHtml(current.status || "")}" />
-        </label>
-      </div>
-    `,
-    confirmLabel: "Сохранить",
-    cancelLabel: "Отмена",
-    showCancel: true,
-    allowClose: true,
-    serializer: () => ({
-      displayName: byId("zenithModalProfileName")?.value.trim() || "",
-      status: byId("zenithModalProfileStatus")?.value.trim() || ""
-    })
-  });
-
-  return result.confirmed ? result.value : null;
-}
-
-function renderAdminSummary() {
-  if (!ui.admin.summary) return;
-
-  const usersCount = Object.keys(state.adminUsersCache || {}).length;
-  const roomsCount = Object.keys(state.adminRoomsCache || {}).length;
-  const matchesCount = Object.keys(state.adminMatchesCache || {}).length;
-  const charactersCount = flattenUsersCharacters().length;
-
-  ui.admin.summary.innerHTML = `
-    <div class="admin-summary-grid">
-      <div class="admin-summary-card"><span>✦ Игроков</span><strong>${usersCount}</strong></div>
-      <div class="admin-summary-card"><span>✦ Персонажей</span><strong>${charactersCount}</strong></div>
-      <div class="admin-summary-card"><span>✦ Комнат</span><strong>${roomsCount}</strong></div>
-      <div class="admin-summary-card"><span>✦ Завершённых тренировок</span><strong>${matchesCount}</strong></div>
-    </div>
-  `;
-}
-
-function renderAdminPlayers() {
-  if (!ui.admin.playersList) return;
-
-  const users = Object.entries(state.adminUsersCache || {});
-  if (!users.length) {
-    ui.admin.playersList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Игроков пока нет.</div></div>`;
-    return;
-  }
-
-  ui.admin.playersList.innerHTML = users.map(([uid, payload]) => {
-    const profile = payload?.profile || {};
-    const charactersCount = Object.keys(payload?.characters || {}).length;
+  ui.profile.charactersList.innerHTML = characters.map(character => {
+    const isExpanded = Boolean(state.expandedCharacterCards[character.id]);
+    const badge = getTrainingStatusLabel(character.trainingStatus);
+    const ownerNote = character.ownerNote ? `<div class="character-owner-note-box">${escapeHtml(character.ownerNote)}</div>` : "";
+    const promoteButton = character.trainingStatus === "apprentice" ? `<button type="button" class="promote-character-btn" data-action="promote-character" data-character-id="${escapeHtml(character.id)}">Посвятить в воители</button>` : "";
+    const upgradeButton = getPendingChoiceCount(character) > 0 ? `<button type="button" class="choose-upgrade-btn" data-action="choose-upgrade" data-character-id="${escapeHtml(character.id)}">Выбрать улучшение (${getPendingChoiceCount(character)})</button>` : "";
 
     return `
-      <article class="admin-user-card" data-user-id="${escapeHtml(uid)}">
-        <div class="admin-user-top">
+      <article class="character-card ${character.trainingStatus === "apprentice" ? "character-card-apprentice" : "character-card-warrior"}">
+        <div class="character-card-top">
           <div>
-            <div class="admin-user-name">${escapeHtml(profile.displayName || "Без имени")}</div>
-            <div class="admin-user-meta">${escapeHtml(profile.status || "Без статуса")}</div>
+            <div class="character-card-name">${escapeHtml(character.name)}</div>
+            <div class="character-card-meta">${escapeHtml(character.clan || "Без племени")} · ${escapeHtml(badge)}</div>
           </div>
-          <div class="admin-user-badge">${profile.blocked ? "⛶ заблокирован" : "✦ активен"}</div>
+          <div class="character-card-badge">${escapeHtml(badge)}</div>
         </div>
 
-        <div class="admin-user-stats">
-          <span>UID: ${escapeHtml(uid)}</span>
-          <span>Персонажей: ${charactersCount}</span>
-          <span>Создан: ${escapeHtml(formatDate(profile.createdAt))}</span>
+        <div class="fancy-stats-grid">
+          <div class="fancy-stat"><span>Победы</span><strong>${character.profileStats.wins}</strong></div>
+          <div class="fancy-stat"><span>Поражения</span><strong>${character.profileStats.losses}</strong></div>
+          <div class="fancy-stat"><span>Ничьи</span><strong>${character.profileStats.draws}</strong></div>
+          <div class="fancy-stat"><span>Зачётных тренировок</span><strong>${character.training.progress.creditedTrainings}</strong></div>
         </div>
 
-        <div class="admin-user-actions">
-          <button type="button" class="admin-edit-profile-btn" data-user-id="${escapeHtml(uid)}">Редактировать профиль</button>
-          <button type="button" class="admin-toggle-block-btn" data-user-id="${escapeHtml(uid)}">${profile.blocked ? "Разблокировать" : "Заблокировать"}</button>
-          <button type="button" class="admin-view-history-btn" data-user-id="${escapeHtml(uid)}">История</button>
-          <button type="button" class="admin-delete-profile-btn" data-user-id="${escapeHtml(uid)}">Удалить данные</button>
+        ${ownerNote}
+
+        <div class="character-actions-extra">
+          <button type="button" class="ghost-btn" data-action="toggle-character" data-character-id="${escapeHtml(character.id)}">${isExpanded ? "Свернуть" : "Развернуть"}</button>
+          <button type="button" class="secondary-btn" data-action="set-active-character" data-character-id="${escapeHtml(character.id)}">Сделать активным</button>
+          <button type="button" class="ghost-btn" data-action="edit-character" data-character-id="${escapeHtml(character.id)}">Редактировать</button>
+          <button type="button" class="ghost-btn ghost-btn-danger" data-action="delete-character" data-character-id="${escapeHtml(character.id)}">Удалить</button>
+          ${upgradeButton}
+          ${promoteButton}
         </div>
+
+        ${isExpanded ? buildCharacterStatsHtml(character) : ""}
       </article>
     `;
   }).join("");
 }
 
-function renderAdminCharacters() {
-  if (!ui.admin.charactersList) return;
-
-  const searchValue = (ui.admin.searchInput?.value || "").trim().toLowerCase();
-  let items = flattenUsersCharacters();
-
-  if (searchValue) {
-    items = items.filter(item => String(item.name || "").toLowerCase().includes(searchValue));
-  }
-
-  if (!items.length) {
-    ui.admin.charactersList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Персонажи не найдены.</div></div>`;
+function renderRoomMeta(room) {
+  if (!room) {
+    html(ui.room.roomMeta, `<div class="room-meta-line">◈ Статус: ожидание</div><div class="room-meta-line">◈ Комната: —</div>`);
+    text(ui.room.creditBadge, "Зачёта не будет");
+    text(ui.room.creditReasonBox, "Сначала создай комнату или войди в неё.");
+    text(ui.room.roomValidationBox, "Пока нет проверки состава.");
     return;
   }
 
-  ui.admin.charactersList.innerHTML = items.map(item => `
-    <article class="admin-character-card">
-      <div class="admin-character-name">${escapeHtml(item.name || "Без имени")}</div>
-      <div class="admin-character-meta">Игрок: ${escapeHtml(item.profileName || "—")} ◈ ${escapeHtml(item.clan || "Без племени")} ◈ ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
-      <div class="admin-character-stats">
-        <span>Победы: ${item.profileStats.wins}</span>
-        <span>Поражения: ${item.profileStats.losses}</span>
-        <span>Ничьи: ${item.profileStats.draws}</span>
-        <span>Последний зачёт: ${escapeHtml(formatOnlyDate(item.training.progress.lastCreditedAt))}</span>
-      </div>
-      <div class="admin-room-actions">
-        <button type="button" class="admin-toggle-char-status-btn" data-user-id="${escapeHtml(item.uid)}" data-character-id="${escapeHtml(item.characterId)}">Сменить статус</button>
-      </div>
-    </article>
-  `).join("");
+  const validation = validateRoomComposition(room);
+  const creditPreview = getRoomCreditPreview(room);
+
+  html(ui.room.roomMeta, `
+    <div class="room-meta-line">◈ Статус: ${escapeHtml(getRoomStatusLabel(room.status))}</div>
+    <div class="room-meta-line">◈ Комната: ${escapeHtml(room.code)}</div>
+    <div class="room-meta-line">◈ Режим: ${escapeHtml(ROOM_MODES[room.settings.mode]?.label || "—")}</div>
+  `);
+
+  text(ui.room.creditBadge, creditPreview.badge);
+  text(ui.room.creditReasonBox, creditPreview.reason);
+  text(ui.room.roomValidationBox, validation.reason);
+  if (ui.room.roomModeSelect) ui.room.roomModeSelect.value = room.settings.mode;
 }
 
-function renderAdminRooms() {
-  if (!ui.admin.roomsList) return;
+function getSeatConfigOptions(room, seat) {
+  const mode = room.settings.mode;
+  let teamOptions = "";
+  if (mode === "ffa") {
+    teamOptions = `<option value="solo-${seat.seatId}">Сам за себя</option>`;
+  } else {
+    teamOptions = `
+      <option value="alpha" ${seat.teamId === "alpha" ? "selected" : ""}>Сторона А</option>
+      <option value="beta" ${seat.teamId === "beta" ? "selected" : ""}>Сторона Б</option>
+    `;
+  }
 
-  const rooms = Object.entries(state.adminRoomsCache || {}).sort((a, b) => (b[1]?.createdAt || 0) - (a[1]?.createdAt || 0));
-  if (!rooms.length) {
-    ui.admin.roomsList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Активных комнат нет.</div></div>`;
+  const characterOptions = getSortedCharacters().map(character => `<option value="${escapeHtml(character.id)}" ${character.id === seat.characterId ? "selected" : ""}>${escapeHtml(character.name)}</option>`).join("");
+  return { teamOptions, characterOptions };
+}
+
+function renderRoomSeats(room) {
+  if (!room) {
+    ui.room.roomPlayers.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Пока вы не подключены ни к одной комнате.</div></div>`;
     return;
   }
 
-  ui.admin.roomsList.innerHTML = rooms.map(([roomCode, room]) => `
-    <article class="admin-room-card">
-      <div class="admin-room-top">
-        <div class="admin-room-name">Комната ${escapeHtml(roomCode)}</div>
-        <div class="admin-room-badge">${escapeHtml(getRoomStatusLabel(room.status))}</div>
-      </div>
-      <div class="admin-room-meta">
-        <span>Игрок 1: ${escapeHtml(room.players?.host?.characterName || "—")}</span>
-        <span>Игрок 2: ${escapeHtml(room.players?.guest?.characterName || "—")}</span>
-      </div>
-      <div class="admin-match-result">${escapeHtml(room.creditPreview?.reason || "—")}</div>
-      <div class="admin-room-actions">
-        <button type="button" class="admin-watch-room-btn" data-room-code="${escapeHtml(roomCode)}">Открыть</button>
-        <button type="button" class="admin-delete-room-btn" data-room-code="${escapeHtml(roomCode)}">Удалить</button>
-        <button type="button" class="admin-finish-room-btn" data-room-code="${escapeHtml(roomCode)}">Завершить зависшую</button>
-      </div>
-    </article>
-  `).join("");
+  const mySeatId = findMySeatId(room);
+
+  ui.room.roomPlayers.innerHTML = `
+    <div class="room-seats-grid">
+      ${getSeatIds().map(seatId => {
+        const seat = normalizeSeat(room.seats?.[seatId], seatId);
+        const occupied = Boolean(seat.uid);
+        const isMine = occupied && seat.uid === state.user?.uid;
+        const teamClass = getSeatBadgeClass(seat.teamId, occupied);
+        const teamLabel = occupied ? getTeamLabel(room.settings.mode, seat.teamId, seatId) : "Свободно";
+        const { teamOptions, characterOptions } = isMine ? getSeatConfigOptions(room, seat) : { teamOptions: "", characterOptions: "" };
+
+        return `
+          <article class="room-seat-card">
+            <div class="room-seat-top">
+              <div>
+                <div class="room-seat-name">${escapeHtml(occupied ? seat.profileName : `Место ${seatId.replace("seat", "#")}`)}</div>
+                <div class="battle-fighter-meta">${escapeHtml(occupied ? `${seat.characterName || "Без персонажа"} · ${seat.clan || "Без племени"}` : "Можно занять это место")}</div>
+              </div>
+              <div class="seat-badge ${teamClass}">${escapeHtml(teamLabel)}</div>
+            </div>
+
+            <div class="seat-meta">
+              <div>Статус: ${escapeHtml(occupied ? getTrainingStatusLabel(seat.trainingStatus) : "—")}</div>
+              <div>Участие в бою: ${occupied ? (seat.included ? "в составе" : "вне состава") : "—"}</div>
+            </div>
+
+            <div class="seat-ready-line">
+              <span>${occupied ? "Готовность" : "Место свободно"}</span>
+              <span class="seat-ready-dot ${seat.ready ? "is-ready" : occupied ? "" : "is-inactive"}"></span>
+            </div>
+
+            ${isMine ? `
+              <div class="seat-controls">
+                <label class="field-block">
+                  <span class="field-label">Персонаж</span>
+                  <select class="field-select" data-role="seat-character">${characterOptions}</select>
+                </label>
+
+                <label class="field-block">
+                  <span class="field-label">Сторона</span>
+                  <select class="field-select" data-role="seat-team">${teamOptions}</select>
+                </label>
+
+                <label class="field-block">
+                  <span class="field-label">Участие</span>
+                  <select class="field-select" data-role="seat-included">
+                    <option value="true" ${seat.included ? "selected" : ""}>В составе</option>
+                    <option value="false" ${!seat.included ? "selected" : ""}>Не участвует</option>
+                  </select>
+                </label>
+
+                <button type="button" class="seat-config-btn" data-action="save-seat-config" data-seat-id="${escapeHtml(seatId)}">Сохранить настройки места</button>
+              </div>
+            ` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  state.currentSeatId = mySeatId;
 }
 
-function renderAdminMatches() {
-  if (!ui.admin.matchesList) return;
+function renderWaitingState(room) {
+  if (!room) { html(ui.room.waitingStateBox, ""); return; }
+  if (room.status === "lobby") {
+    const included = getIncludedSeats(room);
+    const readyCount = included.filter(item => item.ready).length;
+    ui.room.waitingStateBox.innerHTML = `
+      <div class="waiting-pretty-card">
+        <div class="waiting-pretty-title">Лобби комнаты</div>
+        <div class="waiting-pretty-text">Активных бойцов: ${included.length}. Готовы: ${readyCount}.</div>
+        <div class="waiting-pretty-text">Как только все активные участники нажмут готовность, создатель комнаты сможет запустить бой.</div>
+      </div>
+    `;
+  } else {
+    html(ui.room.waitingStateBox, "");
+  }
+}
 
-  const matches = Object.entries(state.adminMatchesCache || {}).sort((a, b) => (b[1]?.finishedAt || 0) - (a[1]?.finishedAt || 0));
-  if (!matches.length) {
-    ui.admin.matchesList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Завершённых тренировок пока нет.</div></div>`;
+function getSubmissionLabel(submission) {
+  if (!submission) return "—";
+  if (submission.type === "defend") return "Защита";
+  if (submission.type === "escape") return "Побег";
+  if (submission.type === "stunned") return "Пропуск хода";
+  if (submission.type === "attack") {
+    const names = safeArray(submission.attacks).map(attack => attackTypeLabel(attack.type, attack.bodyTarget));
+    return names.join(", ") || "Атака";
+  }
+  return "—";
+}
+
+function canCurrentSeatAct(room) {
+  const battle = room?.battle;
+  if (!battle || battle.finished) return false;
+  if (!state.currentSeatId) return false;
+  const participant = battle.participants?.[state.currentSeatId];
+  if (!participant || !isParticipantAlive(participant)) return false;
+  if (battle.submissions?.[state.currentSeatId]) return false;
+  return true;
+}
+
+function renderAttackBuilder(room) {
+  const battle = room?.battle;
+  if (!battle || !state.currentSeatId || !ui.battle.attackBuilderList) return;
+
+  const enemies = getEnemiesForSeat({ settings: { mode: battle.roomMode } }, state.currentSeatId, battle.participants);
+  if (!enemies.length) {
+    ui.battle.attackBuilderList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Противников не осталось.</div></div>`;
     return;
   }
 
-  ui.admin.matchesList.innerHTML = matches.map(([matchId, match]) => `
-    <article class="admin-match-card">
-      <div class="admin-match-title">${escapeHtml(match.hostCharacterName || "—")} ⟡ ${escapeHtml(match.guestCharacterName || "—")}</div>
-      <div class="admin-match-meta">${escapeHtml(formatDate(match.finishedAt))}</div>
-      <div class="admin-match-result">${escapeHtml(match.creditPreview?.reason || match.lastMessage || "—")}</div>
-    </article>
-  `).join("");
+  ui.battle.attackBuilderList.innerHTML = enemies.map(enemy => {
+    const draft = state.attackPlanDraft[enemy.seatId] || { type: "", bodyTarget: "face" };
+    return `
+      <div class="attack-target-card" data-target-seat-id="${escapeHtml(enemy.seatId)}">
+        <div class="attack-target-title">
+          <div>
+            <div class="attack-target-name">${escapeHtml(enemy.name)}</div>
+            <div class="attack-target-meta">${escapeHtml(getTeamLabel(battle.roomMode, enemy.teamId, enemy.seatId))}</div>
+          </div>
+          <div class="seat-badge ${getSeatBadgeClass(enemy.teamId, true)}">${enemy.hp}%</div>
+        </div>
+
+        <div class="attack-target-grid">
+          <label class="field-block">
+            <span class="field-label">Приём</span>
+            <select class="field-select" data-role="attackType" data-target="${escapeHtml(enemy.seatId)}">
+              <option value="">Не бить</option>
+              <option value="sand" ${draft.type === "sand" ? "selected" : ""}>Песок в глаза</option>
+              <option value="paw" ${draft.type === "paw" ? "selected" : ""}>Удар лапой</option>
+              <option value="trip" ${draft.type === "trip" ? "selected" : ""}>Подсечка</option>
+            </select>
+          </label>
+
+          <label class="field-block">
+            <span class="field-label">Часть тела</span>
+            <select class="field-select" data-role="bodyTarget" data-target="${escapeHtml(enemy.seatId)}">
+              ${Object.entries(BODY_TARGETS).map(([key, body]) => `<option value="${escapeHtml(key)}" ${draft.bodyTarget === key ? "selected" : ""}>${escapeHtml(body.label)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
-function renderAdminPlayerHistory() {
-  if (!ui.admin.playerHistoryList) return;
+function renderActionPanel(room) {
+  const battle = room?.battle;
+  if (!battle) return;
 
-  const targetUid = state.adminSelectedUserId;
-  if (!targetUid) {
-    ui.admin.playerHistoryList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Выбери игрока, чтобы увидеть историю.</div></div>`;
+  const canAct = canCurrentSeatAct(room);
+  if (!canAct) {
+    ui.battle.attackActionBtn.disabled = true;
+    ui.battle.defendActionBtn.disabled = true;
+    ui.battle.escapeActionBtn.disabled = true;
+    if (!state.currentSeatId) text(ui.battle.opponentChosenBadge, "Вы наблюдаете за боем");
+    else if (battle.submissions?.[state.currentSeatId]) text(ui.battle.opponentChosenBadge, "Ваш ход уже отправлен");
+    else text(ui.battle.opponentChosenBadge, "Вы не можете действовать");
+    return;
+  }
+
+  ui.battle.attackActionBtn.disabled = false;
+  ui.battle.defendActionBtn.disabled = false;
+  ui.battle.escapeActionBtn.disabled = false;
+  text(ui.battle.opponentChosenBadge, "Выберите действие");
+  renderAttackBuilder(room);
+}
+
+function renderBattleInfo(room) {
+  const battle = room?.battle;
+  if (!battle) {
+    html(ui.battle.info, "");
+    hide(ui.battle.screen);
+    return;
+  }
+
+  show(ui.battle.screen);
+  const mySeatId = state.currentSeatId;
+  const activeParticipants = Object.entries(battle.participants).map(([seatId, item]) => ({ seatId, ...item }));
+  const statusChips = [
+    `<span class="battle-chip battle-chip-active">Ход ${battle.round}</span>`,
+    `<span class="battle-chip">${escapeHtml(ROOM_MODES[battle.roomMode]?.label || "Бой")}</span>`
+  ];
+
+  const fighterCards = activeParticipants.map(participant => {
+    const effects = participant.effects || createDefaultEffects();
+    const turnClass = mySeatId === participant.seatId ? "is-turn" : "";
+    const defeatedClass = participant.defeated ? "is-defeated" : "";
+    const escapedClass = participant.escaped ? "is-escaped" : "";
+    const effectChips = [];
+    if (effects.stunTurns > 0) effectChips.push(`<span class="battle-effect-chip">Оглушение: ${effects.stunTurns}</span>`);
+    if (effects.accuracyPenaltyTurns > 0) effectChips.push(`<span class="battle-effect-chip">Штраф меткости: ${effects.accuracyPenaltyTurns}</span>`);
+    if (effects.dotDamage > 0) effectChips.push(`<span class="battle-effect-chip">Кровотечение: ${effects.dotDamage}%</span>`);
+    if (!effectChips.length) effectChips.push(`<span class="battle-effect-chip">Эффектов нет</span>`);
+
+    const submissionLabel = participant.defeated
+      ? "Выбит"
+      : participant.escaped
+        ? "Ушёл"
+        : battle.submissions?.[participant.seatId]
+          ? getSubmissionLabel(battle.submissions[participant.seatId])
+          : "Действие не выбрано";
+
+    return `
+      <div class="battle-fighter-card ${turnClass} ${defeatedClass} ${escapedClass}">
+        <div class="battle-fighter-card-head">
+          <div>
+            <div class="battle-fighter-name">${escapeHtml(participant.name)}</div>
+            <div class="battle-fighter-meta">${escapeHtml(participant.profileName)} · ${escapeHtml(getTeamLabel(battle.roomMode, participant.teamId, participant.seatId))}</div>
+          </div>
+          <div class="seat-badge ${getSeatBadgeClass(participant.teamId, true)}">${escapeHtml(getTrainingStatusLabel(participant.trainingStatus))}</div>
+        </div>
+
+        <div class="battle-bar-card">
+          <div class="battle-bar-top">
+            <span>Очки спарринга</span>
+            <strong>${participant.hp}%</strong>
+          </div>
+          <div class="battle-bar-track">
+            <div class="battle-bar-fill" style="width:${clamp(participant.hp, 0, 100)}%"></div>
+          </div>
+        </div>
+
+        <div class="battle-fighter-meta">Действие: ${escapeHtml(submissionLabel)}</div>
+
+        <div class="battle-effect-list">${effectChips.join("")}</div>
+
+        <div class="battle-dodge-pips">
+          ${Array.from({ length: MAX_DODGES }).map((_, index) => `<div class="battle-dodge-pip ${index < effects.dodgesLeft ? "is-active" : ""}">✦</div>`).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  ui.battle.info.innerHTML = `
+    <div class="battle-status-shell">
+      <div class="battle-status-top">${statusChips.join("")}</div>
+      <div class="battle-message">
+        <div class="battle-message-title">Последнее сообщение</div>
+        <div class="battle-message-text">${escapeHtml(battle.lastMessage || "Бой идёт.")}</div>
+      </div>
+      <div class="battle-roster-grid">${fighterCards}</div>
+    </div>
+  `;
+
+  renderActionPanel(room);
+}
+
+function renderBattleLog(room) {
+  const battle = room?.battle;
+  if (!battle || !battle.log.length) {
+    ui.battle.log.innerHTML = `<div class="battle-log-empty"><span class="battle-log-empty-mark">✦</span><span>Пока нет записей.</span></div>`;
+    return;
+  }
+
+  ui.battle.log.innerHTML = battle.log.map((entry, index) => `
+    <div class="battle-log-entry ${index >= state.lastRenderedLogLength ? "battle-log-entry-new" : ""}">
+      <div class="battle-log-mark">✦</div>
+      <div class="battle-log-text">${escapeHtml(entry.text)}</div>
+    </div>
+  `).join("");
+
+  state.lastRenderedLogLength = battle.log.length;
+}
+
+function renderResultCard(room) {
+  if (!room || room.status !== "finished" || !room.result) {
+    html(ui.room.roomResultCard, "");
+    return;
+  }
+
+  const battle = room.battle;
+  const summary = room.result.summary || battle?.lastMessage || "Бой завершён.";
+  const winners = battle?.roomMode === "ffa"
+    ? (battle.winnerSeatId ? [battle.participants[battle.winnerSeatId]?.name].filter(Boolean) : [])
+    : Object.entries(battle?.participants || {}).filter(([, p]) => p.teamId === battle.winnerTeamId).map(([, p]) => p.name);
+
+  ui.room.roomResultCard.innerHTML = `
+    <div class="result-pretty-card">
+      <div class="result-pretty-title">Итог боя</div>
+      <div class="result-simple-box">${escapeHtml(summary)}</div>
+      <div class="result-pretty-grid">
+        <div class="result-pretty-item"><span>Режим</span><strong>${escapeHtml(ROOM_MODES[battle?.roomMode || room.settings.mode]?.label || "—")}</strong></div>
+        <div class="result-pretty-item"><span>Победитель</span><strong>${escapeHtml(winners.length ? winners.join(", ") : "Ничья")}</strong></div>
+        <div class="result-pretty-item"><span>Дата</span><strong>${escapeHtml(formatDate(room.result.finishedAt))}</strong></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRoom() {
+  if (ui.room.roomCodeInput) ui.room.roomCodeInput.value = state.currentRoomCode || ui.room.roomCodeInput.value || "";
+  if (!state.currentRoom) {
+    text(ui.room.statusLog, "Пока ничего не происходит.");
+  } else if (state.currentRoom.status === "battle" && state.currentRoom.battle) {
+    text(ui.room.statusLog, state.currentRoom.battle.lastMessage || "Бой идёт.");
+  } else if (state.currentRoom.status === "finished") {
+    text(ui.room.statusLog, state.currentRoom.result?.summary || "Бой завершён.");
+  } else {
+    const included = getIncludedSeats(state.currentRoom);
+    const readyCount = included.filter(item => item.ready).length;
+    text(ui.room.statusLog, `Комната ${state.currentRoom.code}. Активных бойцов: ${included.length}. Готовы: ${readyCount}.`);
+  }
+
+  renderRoomMeta(state.currentRoom);
+  renderRoomSeats(state.currentRoom);
+  renderWaitingState(state.currentRoom);
+  renderBattleInfo(state.currentRoom);
+  renderBattleLog(state.currentRoom);
+  renderResultCard(state.currentRoom);
+  renderRoomBadge(state.currentRoomCode, state.currentRoom?.status || "");
+}
+
+function renderHistory() {
+  if (!state.user) {
+    ui.history.list.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Сначала войди в аккаунт.</div></div>`;
     return;
   }
 
   const matches = Object.entries(state.adminMatchesCache || {})
-    .map(([matchId, match]) => ({ matchId, ...match }))
-    .filter(match => match.hostUid === targetUid || match.guestUid === targetUid)
+    .map(([id, value]) => ({ id, ...value }))
+    .filter(match => safeArray(match.participants).some(item => item.uid === state.user.uid))
     .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
 
   if (!matches.length) {
-    ui.admin.playerHistoryList.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">У игрока пока нет завершённых тренировок.</div></div>`;
+    ui.history.list.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">История тренировок пока пуста.</div></div>`;
     return;
   }
 
-  ui.admin.playerHistoryList.innerHTML = matches.map(match => `
-    <article class="admin-history-card">
-      <div class="admin-history-title">${escapeHtml(match.hostCharacterName || "—")} ⟡ ${escapeHtml(match.guestCharacterName || "—")}</div>
-      <div class="admin-history-meta">${escapeHtml(formatDate(match.finishedAt))}</div>
-      <div class="admin-history-text">${escapeHtml(match.creditPreview?.reason || match.lastMessage || "—")}</div>
+  ui.history.list.innerHTML = matches.map(match => {
+    const myParticipants = safeArray(match.participants).filter(item => item.uid === state.user.uid);
+    return `
+      <article class="history-item-card">
+        <div class="card-title-row">
+          <span class="card-title-mark">✦</span>
+          <h3 class="card-title-text">${escapeHtml(match.summary || "Бой")}</h3>
+        </div>
+        <div class="history-item-date">${escapeHtml(formatDate(match.finishedAt))}</div>
+        <div class="history-item-meta">Режим: ${escapeHtml(ROOM_MODES[match.mode]?.label || "—")} · Ваши персонажи: ${escapeHtml(myParticipants.map(item => item.characterName).join(", "))}</div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderPublicProfiles() {
+  const queryText = (ui.publicProfiles.searchInput?.value || "").trim().toLowerCase();
+  const list = state.publicCharactersCache.filter(item => !queryText || (item.name || "").toLowerCase().includes(queryText)).sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
+
+  if (!list.length) {
+    ui.publicProfiles.list.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Персонажи не найдены.</div></div>`;
+    return;
+  }
+
+  ui.publicProfiles.list.innerHTML = list.map(item => `
+    <article class="public-character-card" data-action="show-public-character" data-public-key="${escapeHtml(item.uid)}__${escapeHtml(item.characterId)}">
+      <div class="public-character-name">${escapeHtml(item.name || "Без имени")}</div>
+      <div class="public-character-meta">${escapeHtml(item.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
+      <div class="public-character-owner">Владелец: ${escapeHtml(item.ownerName || "—")}</div>
     </article>
   `).join("");
 }
 
-function renderAdmin() {
-  if (!state.isAdmin) return;
-  renderAdminSummary();
-  renderAdminPlayers();
-  renderAdminCharacters();
-  renderAdminRooms();
-  renderAdminMatches();
-  renderAdminPlayerHistory();
-}
-
-async function adminEditProfile(userId) {
-  const profile = state.adminUsersCache?.[userId]?.profile;
-  if (!profile) return;
-
-  const values = await openAdminProfileEditModal(profile);
-  if (!values) return;
-
-  await update(ref(db, getProfilePath(userId)), {
-    displayName: values.displayName || profile.displayName || "Зенит",
-    status: values.status || "",
-    updatedAt: now()
-  });
-
-  notify("Профиль обновлён администратором.");
-}
-
-async function adminToggleBlock(userId) {
-  const profile = state.adminUsersCache?.[userId]?.profile;
-  if (!profile) return;
-
-  await update(ref(db, getProfilePath(userId)), {
-    blocked: !profile.blocked,
-    updatedAt: now()
-  });
-
-  notify(profile.blocked ? "Игрок разблокирован." : "Игрок заблокирован.");
-}
-
-async function adminDeleteRoom(roomCode) {
-  const ok = await openConfirmModal({
-    title: "Удаление комнаты",
-    text: `Удалить комнату ${roomCode}?`,
-    confirmLabel: "Удалить"
-  });
-
-  if (!ok) return;
-
-  await remove(ref(db, getRoomPath(roomCode)));
-  notify(`Комната ${roomCode} удалена.`);
-
-  if (state.currentRoomCode === roomCode) {
-    state.currentRoomCode = "";
-    state.currentPlayerRole = null;
-    clearActiveRoomLocal();
-    renderRoomIdleState();
-  }
-}
-
-async function adminDeleteProfileData(userId) {
-  const ok = await openConfirmModal({
-    title: "Удаление данных профиля",
-    text: "Будут удалены профиль игрока и все его персонажи. Аккаунт авторизации останется.",
-    confirmLabel: "Удалить"
-  });
-
-  if (!ok) return;
-
-  await remove(ref(db, `users/${userId}`));
-  notify("Данные профиля удалены.");
-}
-
-async function adminToggleCharacterStatus(userId, characterId) {
-  const snapshot = await get(ref(db, getCharacterPath(userId, characterId)));
-  if (!snapshot.exists()) return;
-
-  const character = normalizeCharacter(snapshot.val());
-  const nextStatus = character.trainingStatus === "apprentice" ? "warrior" : "apprentice";
-
-  await update(ref(db, getCharacterPath(userId, characterId)), {
-    trainingStatus: nextStatus,
-    updatedAt: now()
-  });
-
-  notify(`Статус персонажа сменён на «${getTrainingStatusLabel(nextStatus)}».`);
-}
-
-async function adminFinishRoom(roomCode) {
-  await finishBattleAsUnfinished(roomCode, "Тренировка завершена администратором как зависшая.");
-  notify(`Комната ${roomCode} завершена администратором.`);
-}
-
-function adminOpenRoom(roomCode) {
-  state.currentRoomCode = roomCode;
-
-  const room = state.adminRoomsCache?.[roomCode];
-  if (!room) return;
-
-  if (room.hostUid === state.user?.uid) state.currentPlayerRole = "host";
-  else if (room.guestUid === state.user?.uid) state.currentPlayerRole = "guest";
-  else state.currentPlayerRole = null;
-
-  saveActiveRoomLocal(roomCode, state.currentPlayerRole || "spectator");
-  setScreen("room");
-  notify(`Открыт режим наблюдения за комнатой ${roomCode}.`);
-}
-
-function watchRoom(roomCode) {
-  cleanupRoomWatcher();
-  const roomRef = ref(db, getRoomPath(roomCode));
-
-  state.unsubscribeRoom = onValue(roomRef, snapshot => {
-    if (!snapshot.exists()) {
-      setRoomStatus("Комната не найдена или была удалена.");
-      renderRoomIdleState();
-      clearActiveRoomLocal();
-      return;
-    }
-
-    const room = snapshot.val();
-    renderRoom(roomCode, room);
-
-    ensureRoomTimeouts(roomCode, room).catch(console.error);
-
-    if (room.status === "finished") {
-  saveFinishedMatchIfNeeded(roomCode, room).catch(error => {
-    console.error(error);
-    notifyError(`Не удалось сохранить итог тренировки: ${error.message}`);
-  });
-}
-
-    maybeShowRoomRules(roomCode).catch(console.error);
-  });
-}
-
-function watchAdminData() {
-  if (!state.isAdmin) return;
-
-  if (!state.unsubscribeUsers) {
-    state.unsubscribeUsers = onValue(ref(db, "users"), snapshot => {
-      state.adminUsersCache = snapshot.exists() ? snapshot.val() : {};
-      renderAdmin();
-    });
-  }
-
-  if (!state.unsubscribeRooms) {
-    state.unsubscribeRooms = onValue(ref(db, "rooms"), snapshot => {
-      state.adminRoomsCache = snapshot.exists() ? snapshot.val() : {};
-      renderAdmin();
-    });
-  }
-
-  if (!state.unsubscribeMatches) {
-    state.unsubscribeMatches = onValue(ref(db, "matches"), snapshot => {
-      state.adminMatchesCache = snapshot.exists() ? snapshot.val() : {};
-      renderAdmin();
-    });
-  }
-}
-
-function watchFeed() {
-  if (state.unsubscribeFeed) return;
-
-  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
-  state.unsubscribeFeed = onValue(feedQuery, snapshot => {
-    if (!snapshot.exists()) {
-      state.feedCache = [];
-      renderFeedTicker();
-      return;
-    }
-
-    state.feedCache = Object.values(snapshot.val()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    renderFeedTicker();
-  });
-}
-
-function bindAuthEvents() {
-  ui.auth.registerBtn?.addEventListener("click", () => handleRegister().catch(error => notifyError(error.message)));
-  ui.auth.loginBtn?.addEventListener("click", () => handleLogin().catch(error => notifyError(error.message)));
-  ui.auth.logoutBtn?.addEventListener("click", () => handleLogout().catch(error => notifyError(error.message)));
-}
-
-function bindShellEvents() {
-  ui.shell.mainLogoutBtn?.addEventListener("click", () => {
-    handleLogout().catch(error => notifyError(error.message));
-  });
-
-  ui.shell.openProfileBtn?.addEventListener("click", () => {
-    setScreen("profile");
-    renderProfile();
-  });
-
-  ui.shell.openRoomBtn?.addEventListener("click", () => {
-    setScreen("room");
-    if (!state.currentRoomCode) renderRoomIdleState();
-  });
-
-  ui.shell.openAdminBtn?.addEventListener("click", () => {
-  if (!state.isAdmin) return;
-  watchAdminData();
-  setScreen("admin");
-  renderAdmin();
-});
-
-  ui.shell.openHistoryBtn?.addEventListener("click", () => {
-    setScreen("history");
-    renderMyTrainingHistory().catch(error => notifyError(error.message));
-  });
-
-  ui.shell.openPublicProfilesBtn?.addEventListener("click", () => {
-    setScreen("publicProfiles");
-    loadAllPublicCharacters()
-      .then(() => {
-        renderPublicProfilesList();
-        renderPublicProfileDetails("", "");
-      })
-      .catch(error => notifyError(error.message));
-  });
-
-  ui.shell.themeSelect?.addEventListener("change", async event => {
-    const themeId = event.target.value;
-    applyTheme(themeId);
-
-    if (state.user) {
-      await update(ref(db, getProfilePath(state.user.uid)), {
-        themeId,
-        updatedAt: now()
-      });
-      state.userProfile = await loadUserProfile(state.user.uid);
-    }
-  });
-}
-
-function bindProfileEvents() {
-  ui.profile.saveProfileBtn?.addEventListener("click", () => {
-    saveProfileStatus()
-      .then(() => renderProfile())
-      .catch(error => notifyError(error.message));
-  });
-
-  ui.profile.savePortraitSymbolBtn?.addEventListener("click", () => {
-    savePortraitSymbol()
-      .then(() => renderProfile())
-      .catch(error => notifyError(error.message));
-  });
-
-  ui.profile.addCharacterBtn?.addEventListener("click", () => {
-    addCharacter()
-      .then(() => renderProfile())
-      .catch(error => notifyError(error.message));
-  });
-
-  ui.profile.activeCharacterSelect?.addEventListener("change", event => {
-    const characterId = event.target.value;
-    saveActiveCharacter(characterId)
-      .then(async () => {
-        state.userProfile = await loadUserProfile(state.user.uid);
-        renderProfile();
-      })
-      .catch(error => notifyError(error.message));
-  });
-
-  ui.profile.characterSearchInput?.addEventListener("input", renderCharactersList);
-
-  ui.profile.saveOwnerNoteBtn?.addEventListener("click", () => {
-    const activeId = getSelectedCharacterId();
-    const note = ui.profile.ownerNoteInput?.value || "";
-    saveOwnerNote(activeId, note)
-      .then(() => renderProfile())
-      .catch(error => notifyError(error.message));
-  });
-
- ui.profile.charactersList?.addEventListener("click", event => {
-  const target = event.target;
-  const characterId = target?.dataset?.characterId;
-
-  if (target.classList.contains("character-toggle-btn")) {
-    toggleCharacterCardExpanded(characterId);
-    renderCharactersList();
+function renderSelectedPublicProfile(publicKey = "") {
+  const item = state.publicCharactersCache.find(entry => `${entry.uid}__${entry.characterId}` === publicKey);
+  if (!item) {
+    ui.publicProfiles.details.innerHTML = `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Выберите персонажа слева.</div></div>`;
     return;
   }
 
-  if (!characterId) return;
-
-    if (target.classList.contains("set-active-character-btn")) {
-      saveActiveCharacter(characterId)
-        .then(async () => {
-          state.userProfile = await loadUserProfile(state.user.uid);
-          renderProfile();
-        })
-        .catch(error => notifyError(error.message));
-    }
-
-    if (target.classList.contains("edit-character-btn")) {
-      editCharacter(characterId)
-        .then(() => renderProfile())
-        .catch(error => notifyError(error.message));
-    }
-
-    if (target.classList.contains("delete-character-btn")) {
-      deleteCharacter(characterId)
-        .then(() => renderProfile())
-        .catch(error => notifyError(error.message));
-    }
-
-    if (target.classList.contains("choose-upgrade-btn")) {
-      chooseUpgradeForCharacter(characterId)
-        .then(() => renderProfile())
-        .catch(error => notifyError(error.message));
-    }
-
-    if (target.classList.contains("promote-character-btn")) {
-      promoteApprenticeToWarrior(characterId)
-        .then(() => renderProfile())
-        .catch(error => notifyError(error.message));
-    }
+  const character = normalizeCharacter({
+    name: item.name,
+    clan: item.clan,
+    trainingStatus: item.trainingStatus,
+    ownerNote: item.ownerNote,
+    profileStats: item.profileStats,
+    training: item.training,
+    combatBase: createDefaultCombatBase()
   });
+
+  ui.publicProfiles.details.innerHTML = `
+    <div class="public-profile-card">
+      <div class="card-title-row">
+        <span class="card-title-mark">✦</span>
+        <h3 class="card-title-text">${escapeHtml(item.name)}</h3>
+      </div>
+      <div class="public-profile-owner">Владелец: ${escapeHtml(item.ownerName || "—")}</div>
+      <div class="public-profile-meta">${escapeHtml(item.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
+      ${buildCharacterStatsHtml(character)}
+    </div>
+  `;
 }
 
-function bindRoomEvents() {
-  ui.room.createRoomBtn?.addEventListener("click", () => {
-    createRoom()
-      .then(() => {
-        setScreen("room");
-        if (state.currentRoomCode) watchRoom(state.currentRoomCode);
-      })
-      .catch(error => notifyError(error.message));
-  });
+function renderAdmin() {
+  if (!state.isAdmin) return;
 
-  ui.room.joinRoomBtn?.addEventListener("click", () => {
-    joinRoom()
-      .then(() => {
-        setScreen("room");
-        if (state.currentRoomCode) watchRoom(state.currentRoomCode);
-      })
-      .catch(error => notifyError(error.message));
-  });
+  const users = Object.entries(state.adminUsersCache || {}).map(([uid, value]) => ({ uid, profile: value.profile || null, characters: value.characters || {} }));
+  const rooms = Object.entries(state.adminRoomsCache || {}).map(([code, value]) => normalizeRoom(value, code)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const matches = Object.entries(state.adminMatchesCache || {}).map(([id, value]) => ({ id, ...value })).sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
 
-  ui.room.leaveRoomBtn?.addEventListener("click", () => {
-    leaveRoom()
-      .then(() => {
-        renderRoomIdleState();
-      })
-      .catch(error => notifyError(error.message));
-  });
+  ui.admin.summary.innerHTML = `
+    <div class="admin-summary-grid">
+      <div class="admin-summary-card"><span>Игроков</span><strong>${users.length}</strong></div>
+      <div class="admin-summary-card"><span>Комнат</span><strong>${rooms.length}</strong></div>
+      <div class="admin-summary-card"><span>Сохранённых боёв</span><strong>${matches.length}</strong></div>
+    </div>
+  `;
 
-  ui.room.copyRoomCodeBtn?.addEventListener("click", async () => {
-    const code = state.currentRoomCode || ui.room.roomCodeInput?.value || "";
-    if (!code) {
-      notifyError("Нет кода комнаты для копирования.");
+  ui.admin.playersList.innerHTML = users.length ? users.map(user => `
+    <div class="admin-user-card">
+      <div class="admin-room-name">${escapeHtml(user.profile?.displayName || user.uid)}</div>
+      <div class="admin-meta-row">
+        <span>${escapeHtml(user.uid)}</span>
+        <span>Персонажей: ${Object.keys(user.characters || {}).length}</span>
+      </div>
+    </div>
+  `).join("") : `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Игроков пока нет.</div></div>`;
+
+  ui.admin.roomsList.innerHTML = rooms.length ? rooms.map(room => `
+    <div class="admin-room-card">
+      <div class="admin-room-name">${escapeHtml(room.code)}</div>
+      <div class="admin-room-meta">Статус: ${escapeHtml(getRoomStatusLabel(room.status))} · Режим: ${escapeHtml(ROOM_MODES[room.settings.mode]?.label || "—")}</div>
+      <div class="admin-meta-row">
+        <span>Игроков: ${getOccupiedSeats(room).length}</span>
+        <span>Активных: ${getIncludedSeats(room).length}</span>
+      </div>
+    </div>
+  `).join("") : `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">Комнат пока нет.</div></div>`;
+
+  ui.admin.matchesList.innerHTML = matches.length ? matches.map(match => `
+    <div class="admin-match-card">
+      <div class="admin-match-title">${escapeHtml(match.summary || "Бой")}</div>
+      <div class="admin-match-meta">${escapeHtml(formatDate(match.finishedAt))} · ${escapeHtml(ROOM_MODES[match.mode]?.label || "—")}</div>
+      <div class="admin-meta-row">${safeArray(match.participants).map(item => `<span>${escapeHtml(item.characterName)}</span>`).join("")}</div>
+    </div>
+  `).join("") : `<div class="empty-state-card"><div class="empty-state-mark">✦</div><div class="empty-state-text">История пока пуста.</div></div>`;
+}
+
+function renderAll() {
+  renderAuthState();
+  renderUserBadge();
+  renderProfile();
+  renderRoom();
+  renderFeedTicker();
+  renderHistory();
+  renderPublicProfiles();
+  renderAdmin();
+}
+
+function bindProfileCardActions() {
+  ui.profile.charactersList?.addEventListener("click", async event => {
+    const actionEl = event.target.closest("[data-action]");
+    if (!actionEl) return;
+    const characterId = actionEl.dataset.characterId || "";
+    const action = actionEl.dataset.action || "";
+
+    if (action === "toggle-character") {
+      state.expandedCharacterCards[characterId] = !state.expandedCharacterCards[characterId];
+      renderProfile();
       return;
     }
-
-    await navigator.clipboard.writeText(code);
-    notify("Код комнаты скопирован.");
-  });
-
-  ui.room.readyToggleBtn?.addEventListener("click", () => {
-    toggleReady().catch(error => notifyError(error.message));
-  });
-
-  ui.room.startBattleBtn?.addEventListener("click", () => {
-    notify("Тренировка стартует автоматически после двух подтверждений готовности.");
+    if (action === "set-active-character") { await saveActiveCharacter(characterId); notify("Активный персонаж обновлён."); return; }
+    if (action === "edit-character") { await editCharacter(characterId); return; }
+    if (action === "delete-character") { await deleteCharacter(characterId); return; }
+    if (action === "choose-upgrade") { await chooseUpgradeForCharacter(characterId); return; }
+    if (action === "promote-character") { await promoteApprenticeToWarrior(characterId); }
   });
 }
 
-function bindBattleEvents() {
-  ui.battle.attackActionBtn?.addEventListener("click", () => {
-    if (ui.battle.attackActionBtn.disabled) return;
-    showBattleAttackMenu();
+function bindRoomActions() {
+  ui.room.roomPlayers?.addEventListener("click", async event => {
+    const actionEl = event.target.closest("[data-action='save-seat-config']");
+    if (!actionEl) return;
+
+    const seatId = actionEl.dataset.seatId || "";
+    const card = actionEl.closest(".room-seat-card");
+    if (!card || !seatId) return;
+
+    const teamId = card.querySelector("[data-role='seat-team']")?.value || "alpha";
+    const includedValue = card.querySelector("[data-role='seat-included']")?.value || "true";
+    const characterId = card.querySelector("[data-role='seat-character']")?.value || "";
+
+    await updateSeatConfig(seatId, { teamId, included: includedValue === "true", characterId });
   });
 
-  ui.battle.backToActionsBtn?.addEventListener("click", () => {
-    if (ui.battle.backToActionsBtn.disabled) return;
-    showBattleMainActions();
-  });
-
-  ui.battle.pawAttackBtn?.addEventListener("click", () => {
-    if (ui.battle.pawAttackBtn.disabled) return;
-    showBattleTargetMenu();
-  });
-
-  ui.battle.backToAttackMenuBtn?.addEventListener("click", () => {
-    if (ui.battle.backToAttackMenuBtn.disabled) return;
-    showBattleAttackMenu();
-  });
-
-  ui.battle.sandAttackBtn?.addEventListener("click", () => performTurn("sand").catch(error => notifyError(error.message)));
-  ui.battle.tripAttackBtn?.addEventListener("click", () => performTurn("trip").catch(error => notifyError(error.message)));
-  ui.battle.defendActionBtn?.addEventListener("click", () => performTurn("defend").catch(error => notifyError(error.message)));
-  ui.battle.escapeActionBtn?.addEventListener("click", () => performTurn("escape").catch(error => notifyError(error.message)));
-
-  ui.battle.faceTargetBtn?.addEventListener("click", () => performTurn("paw", "face").catch(error => notifyError(error.message)));
-  ui.battle.frontLeftTargetBtn?.addEventListener("click", () => performTurn("paw", "frontLeft").catch(error => notifyError(error.message)));
-  ui.battle.frontRightTargetBtn?.addEventListener("click", () => performTurn("paw", "frontRight").catch(error => notifyError(error.message)));
-  ui.battle.sideTargetBtn?.addEventListener("click", () => performTurn("paw", "side").catch(error => notifyError(error.message)));
-  ui.battle.earsTargetBtn?.addEventListener("click", () => performTurn("paw", "ears").catch(error => notifyError(error.message)));
-  ui.battle.neckTargetBtn?.addEventListener("click", () => performTurn("paw", "neck").catch(error => notifyError(error.message)));
-}
-
-function bindPublicProfilesEvents() {
-  ui.publicProfiles.searchBtn?.addEventListener("click", () => {
-    renderPublicProfilesList();
-  });
-
-  ui.publicProfiles.searchInput?.addEventListener("input", () => {
-    renderPublicProfilesList();
+  ui.battle.attackBuilderList?.addEventListener("change", event => {
+    const select = event.target;
+    if (!(select instanceof HTMLSelectElement)) return;
+    const targetSeatId = select.dataset.target || "";
+    if (!targetSeatId) return;
+    state.attackPlanDraft[targetSeatId] = state.attackPlanDraft[targetSeatId] || { type: "", bodyTarget: "face" };
+    if (select.dataset.role === "attackType") state.attackPlanDraft[targetSeatId].type = select.value;
+    if (select.dataset.role === "bodyTarget") state.attackPlanDraft[targetSeatId].bodyTarget = select.value;
   });
 
   ui.publicProfiles.list?.addEventListener("click", event => {
-    const target = event.target.closest("[data-public-uid][data-public-character-id]");
-    if (!target) return;
-
-    const uid = target.dataset.publicUid;
-    const characterId = target.dataset.publicCharacterId;
-    renderPublicProfileDetails(uid, characterId);
+    const card = event.target.closest("[data-action='show-public-character']");
+    if (!card) return;
+    renderSelectedPublicProfile(card.dataset.publicKey || "");
   });
 }
 
-function bindAdminEvents() {
-  ui.admin.searchBtn?.addEventListener("click", renderAdminCharacters);
-  ui.admin.refreshBtn?.addEventListener("click", renderAdmin);
-  ui.admin.searchInput?.addEventListener("input", renderAdminCharacters);
+function bindUi() {
+  ensureUiChrome();
+  renderThemeSelector();
+  renderCardStyleSelector();
 
-  ui.admin.playersList?.addEventListener("click", event => {
-    const target = event.target;
-    const userId = target?.dataset?.userId;
-    if (!userId) return;
+  ui.auth.registerBtn?.addEventListener("click", () => handleRegister().catch(handleError));
+  ui.auth.loginBtn?.addEventListener("click", () => handleLogin().catch(handleError));
+  ui.auth.logoutBtn?.addEventListener("click", () => handleLogout().catch(handleError));
+  ui.shell.mainLogoutBtn?.addEventListener("click", () => handleLogout().catch(handleError));
 
-    if (target.classList.contains("admin-edit-profile-btn")) {
-      adminEditProfile(userId).catch(error => notifyError(error.message));
-    }
+  ui.shell.openProfileBtn?.addEventListener("click", () => setScreen("profile"));
+  ui.shell.openRoomBtn?.addEventListener("click", () => setScreen("room"));
+  ui.shell.openHistoryBtn?.addEventListener("click", () => setScreen("history"));
+  ui.shell.openPublicProfilesBtn?.addEventListener("click", () => setScreen("publicProfiles"));
+  ui.shell.openAdminBtn?.addEventListener("click", () => setScreen("admin"));
 
-    if (target.classList.contains("admin-toggle-block-btn")) {
-      adminToggleBlock(userId).catch(error => notifyError(error.message));
-    }
+  ui.shell.themeSelect?.addEventListener("change", event => applyTheme(event.target.value));
+  ui.shell.cardStyleSelect?.addEventListener("change", event => applyCardStyle(event.target.value));
 
-    if (target.classList.contains("admin-view-history-btn")) {
-      state.adminSelectedUserId = userId;
-      renderAdminPlayerHistory();
-    }
-
-    if (target.classList.contains("admin-delete-profile-btn")) {
-      adminDeleteProfileData(userId).catch(error => notifyError(error.message));
-    }
+  ui.profile.saveProfileBtn?.addEventListener("click", () => saveProfileStatus().catch(handleError));
+  ui.profile.savePortraitSymbolBtn?.addEventListener("click", () => savePortraitSymbol().catch(handleError));
+  ui.profile.addCharacterBtn?.addEventListener("click", () => addCharacter().catch(handleError));
+  ui.profile.saveOwnerNoteBtn?.addEventListener("click", () => {
+    const id = getSelectedCharacterId();
+    saveOwnerNote(id, ui.profile.ownerNoteInput?.value.trim() || "").catch(handleError);
   });
+  ui.profile.activeCharacterSelect?.addEventListener("change", event => saveActiveCharacter(event.target.value).catch(handleError));
+  ui.profile.characterSearchInput?.addEventListener("input", () => renderProfile());
 
-  ui.admin.roomsList?.addEventListener("click", event => {
-    const target = event.target;
-    const roomCode = target?.dataset?.roomCode;
-    if (!roomCode) return;
-
-    if (target.classList.contains("admin-watch-room-btn")) {
-      adminOpenRoom(roomCode);
-      watchRoom(roomCode);
-    }
-
-    if (target.classList.contains("admin-delete-room-btn")) {
-      adminDeleteRoom(roomCode).catch(error => notifyError(error.message));
-    }
-
-    if (target.classList.contains("admin-finish-room-btn")) {
-      adminFinishRoom(roomCode).catch(error => notifyError(error.message));
-    }
+  ui.room.createRoomBtn?.addEventListener("click", () => createRoom().catch(handleError));
+  ui.room.joinRoomBtn?.addEventListener("click", () => joinRoom().catch(handleError));
+  ui.room.leaveRoomBtn?.addEventListener("click", () => leaveRoom().catch(handleError));
+  ui.room.copyRoomCodeBtn?.addEventListener("click", async () => {
+    if (!state.currentRoomCode) { notifyError("Сначала войди в комнату."); return; }
+    await navigator.clipboard.writeText(state.currentRoomCode);
+    notify("Код комнаты скопирован.");
   });
+  ui.room.readyToggleBtn?.addEventListener("click", () => toggleReady().catch(handleError));
+  ui.room.startBattleBtn?.addEventListener("click", () => startBattle().catch(handleError));
+  ui.room.saveRoomSettingsBtn?.addEventListener("click", () => saveRoomSettings().catch(handleError));
 
-  ui.admin.charactersList?.addEventListener("click", event => {
-    const target = event.target;
-    const userId = target?.dataset?.userId;
-    const characterId = target?.dataset?.characterId;
-    if (!userId || !characterId) return;
+  ui.battle.attackActionBtn?.addEventListener("click", () => {
+    if (!state.currentRoom?.battle) return;
+    show(ui.battle.attackMenu);
+    hide(ui.battle.actions);
+    renderAttackBuilder(state.currentRoom);
+  });
+  ui.battle.backToActionsBtn?.addEventListener("click", () => {
+    hide(ui.battle.attackMenu);
+    show(ui.battle.actions);
+  });
+  ui.battle.confirmAttackPlanBtn?.addEventListener("click", () => submitAttackPlanFromBuilder().catch(handleError));
+  ui.battle.defendActionBtn?.addEventListener("click", () => submitDefend().catch(handleError));
+  ui.battle.escapeActionBtn?.addEventListener("click", () => submitEscape().catch(handleError));
 
-    if (target.classList.contains("admin-toggle-char-status-btn")) {
-      adminToggleCharacterStatus(userId, characterId).catch(error => notifyError(error.message));
-    }
+  ui.publicProfiles.searchInput?.addEventListener("input", () => renderPublicProfiles());
+  ui.publicProfiles.searchBtn?.addEventListener("click", () => renderPublicProfiles());
+
+  bindProfileCardActions();
+  bindRoomActions();
+
+  onAuthStateChanged(auth, user => {
+    if (user) handleSignedInUser(user).catch(handleError);
+    else handleSignedOutUser();
   });
 }
 
-async function restoreRoomWatcherIfNeeded() {
-  if (!state.currentRoomCode) {
-    renderRoomIdleState();
+function handleError(error) {
+  console.error(error);
+  notifyError(error?.message || "Что-то пошло не так.");
+}
+
+function stopRoomTimer() {
+  if (state.roomTimerInterval) {
+    clearInterval(state.roomTimerInterval);
+    state.roomTimerInterval = null;
+  }
+}
+
+function startRoomTimer(deadline, onExpire) {
+  stopRoomTimer();
+  if (!deadline) {
+    text(ui.room.roomTimer, "00:00");
     return;
   }
 
-  watchRoom(state.currentRoomCode);
-}
-
-function resetSignedOutUi() {
-  cleanupRoomWatcher();
-  cleanupAdminWatchers();
-  stopRoomTimer();
-  state.currentRoomCode = "";
-  state.currentPlayerRole = null;
-  state.currentBattleTurnNumber = null;
-  clearActiveRoomLocal();
-  renderRoomIdleState();
-}
-
-function init() {
-  ensureUiChrome();
-  applyTheme(readThemeLocal());
-  renderThemeSelector();
-  renderFeedTicker();
-  bindAuthEvents();
-  bindShellEvents();
-  bindProfileEvents();
-  bindRoomEvents();
-  bindBattleEvents();
-  bindPublicProfilesEvents();
-  bindAdminEvents();
-
-  showBattleMainActions();
-  setBattleButtonsDisabled(true, false);
-  setBattleLog([]);
-  renderRoomIdleState();
-
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      handleSignedInUser(user)
-        .then(async () => {
-          renderAuthState();
-          renderProfile();
-          await loadRecentFeedEntries();
-          renderFeedTicker();
-          watchFeed();
-          if (state.isAdmin) watchAdminData();
-          await tryAutoJoinSavedRoom();
-          await restoreRoomWatcherIfNeeded();
-          setScreen(state.currentRoomCode ? "room" : "profile");
-        })
-        .catch(error => {
-          console.error(error);
-          notifyError(error.message);
-        });
-    } else {
-      handleSignedOutUser();
-      resetSignedOutUi();
-      renderAuthState();
-      setScreen("auth");
-      notify("Войдите в аккаунт, чтобы продолжить.");
+  state.roomTimerInterval = setInterval(() => {
+    const left = Math.max(0, deadline - now());
+    const minutes = String(Math.floor(left / 60000)).padStart(2, "0");
+    const seconds = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
+    text(ui.room.roomTimer, `${minutes}:${seconds}`);
+    if (left <= 0) {
+      stopRoomTimer();
+      if (typeof onExpire === "function") onExpire();
     }
-  });
+  }, 1000);
 }
 
-init();
-
+bindUi();
+loadRecentFeedEntries().then(renderFeedTicker).catch(console.error);
