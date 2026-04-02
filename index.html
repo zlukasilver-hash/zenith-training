@@ -9,7 +9,7 @@
   <title>ZENITH RP — Тренировки</title>
   <meta
     name="description"
-    content="Система тренировок для ролевой по Котам-воителям."
+    content="Система тренировок для полу-ролевой Зенит."
   />
   <link rel="stylesheet" href="./style.css" />
 </head>
@@ -45,7 +45,7 @@
         </h1>
 
         <p class="hero-text">
-          Сайт полуролевой "Зенит" для удобства в тренировках.
+          Сайт полуролевой «Зенит» для удобства в тренировках, комнатах и боевых зачётах.
         </p>
       </div>
     </header>
@@ -60,7 +60,7 @@
     <nav class="top-nav">
       <div class="top-nav-left">
         <div id="currentUserBadge" class="current-user-badge">✦ Гость ✦</div>
-        <div id="globalNotice" class="global-notice">Добро пожаловать!</div>
+        <div id="globalNotice" class="global-notice">Добро пожаловать.</div>
         <div id="currentRoomBadge" class="current-room-badge hidden">✦ Комната: —</div>
       </div>
 
@@ -76,25 +76,25 @@
         <label class="theme-picker">
           <span>Тема</span>
           <select id="themeSelect" class="theme-select">
-  <option value="crimsonNight">Багровая ночь</option>
-  <option value="blackCherry">Тёмная вишня</option>
-  <option value="amberNight">Янтарь</option>
-  <option value="moonlight">Лунный свет</option>
-  <option value="frostLake">Ледяное озеро</option>
-  <option value="forestDweller">Житель леса</option>
-  <option value="heatherMist">Вереск</option>
-  <option value="eclipse">Затмение</option>
-  <option value="obsidian">Обсидиан</option>
-  <option value="ashen">Пепел</option>
-  <option value="mist">Туман</option>
-  <option value="parchment">Пергамент</option>
-  <option value="autumn">Осень</option>
-  <option value="waterfall">Водопад</option>
-  <option value="garnet">Гранат</option>
-  <option value="greenery">Зелень</option>
-  <option value="raspberry">Малина</option>
-  <option value="sea">Море</option>
-</select>
+            <option value="crimsonNight">Багровая ночь</option>
+            <option value="blackCherry">Тёмная вишня</option>
+            <option value="amberNight">Янтарь</option>
+            <option value="moonlight">Лунный свет</option>
+            <option value="frostLake">Ледяное озеро</option>
+            <option value="forestDweller">Житель леса</option>
+            <option value="heatherMist">Вереск</option>
+            <option value="eclipse">Затмение</option>
+            <option value="obsidian">Обсидиан</option>
+            <option value="ashen">Пепел</option>
+            <option value="mist">Туман</option>
+            <option value="parchment">Пергамент</option>
+            <option value="autumn">Осень</option>
+            <option value="waterfall">Водопад</option>
+            <option value="garnet">Гранат</option>
+            <option value="greenery">Зелень</option>
+            <option value="raspberry">Малина</option>
+            <option value="sea">Море</option>
+          </select>
         </label>
 
         <label class="theme-picker card-style-picker">
@@ -119,8 +119,7 @@
           <div class="screen-kicker">✦ Вход</div>
           <h2 class="screen-title">Аккаунт игрока</h2>
           <p class="screen-text">
-            Войди в систему или создай профиль, чтобы открыть доступ к комнатам,
-            тренировкам и навыкам своих персонажей.
+            Войди в систему или создай профиль, чтобы открыть доступ к персонажам, комнатам и тренировкам.
           </p>
         </div>
 
@@ -174,12 +173,12 @@
           </div>
 
           <div class="auth-side-card">
-            <div class="auth-side-top">✦ Чтобы начать тренироваться</div>
+            <div class="auth-side-top">✦ Чтобы начать</div>
             <ul class="auth-side-list">
               <li>создай профиль игрока;</li>
               <li>добавь персонажей и выбери активного;</li>
-              <li>открывай комнату и начинай тренировку;</li>
-              <li>отслеживай улучшения, зачёты и историю.</li>
+              <li>создай комнату или войди по коду;</li>
+              <li>сражайся, получай зачёты и улучшения.</li>
             </ul>
           </div>
         </div>
@@ -190,8 +189,7 @@
           <div class="screen-kicker">✦ Профиль</div>
           <h2 class="screen-title">Игрок и персонажи</h2>
           <p class="screen-text">
-            Здесь хранится всё главное: твой статус, активный персонаж,
-            тренировочная статистика, усиления и личные заметки.
+            Здесь хранятся статус игрока, активный персонаж, статистика боёв, улучшения и заметки.
           </p>
         </div>
 
@@ -208,9 +206,7 @@
 
               <div class="profile-name-block">
                 <h3 id="profileName" class="profile-name">Зенит</h3>
-                <p id="profileStatusText" class="profile-status-text">
-                  ✦ Наблюдает за бабочками
-                </p>
+                <p id="profileStatusText" class="profile-status-text">✦ Наблюдает за бабочками</p>
               </div>
 
               <div class="field-stack">
@@ -360,8 +356,7 @@
           <div class="screen-kicker">✦ Комната</div>
           <h2 class="screen-title">Тренировочная комната</h2>
           <p class="screen-text">
-            Создавай комнату, копируй код, зови игроков и запускай
-            тренировку после взаимной готовности.
+            Создавай комнату, зови игроков, меняй формат боя и запускай тренировку после общей готовности.
           </p>
         </div>
 
@@ -514,7 +509,7 @@
                       </div>
 
                       <div id="opponentChosenBadge" class="opponent-chosen-badge">
-                        Соперник ещё думает
+                        Ожидание действий
                       </div>
                     </div>
 
@@ -548,21 +543,21 @@
                         <div class="battle-attack-description">
                           <div class="battle-attack-description-title">Песок в глаза</div>
                           <div class="battle-attack-description-text">
-                            Вы кидаете песок в глаза врага, оглушая его и уменьшая его шансы попасть по вам.
+                            Оглушает противника и временно портит его точность.
                           </div>
                         </div>
 
                         <div class="battle-attack-description">
                           <div class="battle-attack-description-title">Удар лапой</div>
                           <div class="battle-attack-description-text">
-                            Вы наносите удар по выбранной части тела и запускаете фальшивый кровоток у врага.
+                            Бьёт по выбранной части тела и запускает кровотечение.
                           </div>
                         </div>
 
                         <div class="battle-attack-description">
                           <div class="battle-attack-description-title">Подсечка</div>
                           <div class="battle-attack-description-text">
-                            Вы опрокидываете врага. Приём может заставить противника пропустить ход и наносит наибольший урон, но при промахе возможны неприятные последствия.
+                            Сильный приём с оглушением, но при промахе можно пострадать самому.
                           </div>
                         </div>
                       </div>
@@ -635,7 +630,7 @@
           <div class="screen-kicker">✦ Галерея</div>
           <h2 class="screen-title">Профили персонажей</h2>
           <p class="screen-text">
-            Открывай чужие профили, смотри улучшения и тренировочную статистику.
+            Здесь можно смотреть персонажей других игроков, их статистику и улучшения.
           </p>
         </div>
 

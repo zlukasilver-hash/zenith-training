@@ -885,6 +885,7 @@ function normalizeBattle(raw) {
     fighters,
     lastMessage: raw?.lastMessage || "Тренировка началась.",
     log: safeArray(raw?.log),
+    pendingRoundCards: safeArray(raw?.pendingRoundCards),
     finished: Boolean(raw?.finished),
     winnerSide: raw?.winnerSide || "",
     winnerUid: raw?.winnerUid || "",
@@ -1303,7 +1304,7 @@ function getRoomRulesHtml() {
         <div class="room-rules-title">Пороги улучшений</div>
         <ul>
           <li>воитель: 3 засчитанные победы или 5 засчитанных поражений дают 1 улучшение;</li>
-          <li>оруженосец: 5 засчитанных побед или 7 засчитанных поражений дают 1 улучшение.</li>
+          <li>оруженосец: 5 засчитанные победы или 7 засчитанных поражений дают 1 улучшение.</li>
         </ul>
       </div>
     </div>
@@ -1363,14 +1364,20 @@ async function savePortraitSymbol() {
 
 async function saveActiveCharacter(characterId) {
   if (!requireAuth()) return;
-  await update(ref(db, getProfilePath(state.user.uid)), { activeCharacterId: characterId || "", updatedAt: now() });
+  await update(ref(db, getProfilePath(state.user.uid)), {
+    activeCharacterId: characterId || "",
+    updatedAt: now()
+  });
   state.userProfile = await loadUserProfile(state.user.uid);
   renderProfile();
 }
 
 async function saveOwnerNote(characterId, noteText) {
   if (!requireAuth() || !characterId) return;
-  await update(ref(db, getCharacterPath(state.user.uid, characterId)), { ownerNote: noteText || "", updatedAt: now() });
+  await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
+    ownerNote: noteText || "",
+    updatedAt: now()
+  });
   await loadOwnCharacters();
   notify("Заметка сохранена.");
   renderProfile();
@@ -1381,19 +1388,27 @@ async function addCharacter() {
   const name = ui.profile.charNameInput?.value.trim() || "";
   const clan = ui.profile.charClanInput?.value.trim() || "";
   const trainingStatus = ui.profile.charTrainingStatusSelect?.value || "warrior";
+
   if (!name) {
     notifyError("Впиши имя персонажа.");
     return;
   }
+
   const charRef = push(ref(db, getCharactersPath(state.user.uid)));
   await set(charRef, createDefaultCharacter(name, clan, trainingStatus));
+
   if (!state.userProfile?.activeCharacterId) {
-    await update(ref(db, getProfilePath(state.user.uid)), { activeCharacterId: charRef.key, updatedAt: now() });
+    await update(ref(db, getProfilePath(state.user.uid)), {
+      activeCharacterId: charRef.key,
+      updatedAt: now()
+    });
     state.userProfile = await loadUserProfile(state.user.uid);
   }
+
   if (ui.profile.charNameInput) ui.profile.charNameInput.value = "";
   if (ui.profile.charClanInput) ui.profile.charClanInput.value = "";
   if (ui.profile.charTrainingStatusSelect) ui.profile.charTrainingStatusSelect.value = "warrior";
+
   await loadOwnCharacters();
   notify("Новый персонаж добавлен.");
   renderProfile();
@@ -1432,11 +1447,13 @@ async function editCharacter(characterId) {
   if (!character) return;
   const next = await openCharacterEditModal(character);
   if (!next) return;
+
   await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
     name: next.name || character.name || "Без имени",
     clan: next.clan || "",
     updatedAt: now()
   });
+
   await loadOwnCharacters();
   notify("Персонаж обновлён.");
   renderProfile();
@@ -1446,17 +1463,24 @@ async function deleteCharacter(characterId) {
   if (!requireAuth()) return;
   const character = getCharacterById(characterId);
   if (!character) return;
+
   const ok = await openConfirmModal({
     title: "Удаление персонажа",
     text: `Удалить персонажа «${character.name}»?`,
     confirmLabel: "Удалить"
   });
   if (!ok) return;
+
   await remove(ref(db, getCharacterPath(state.user.uid, characterId)));
+
   if (state.userProfile?.activeCharacterId === characterId) {
-    await update(ref(db, getProfilePath(state.user.uid)), { activeCharacterId: "", updatedAt: now() });
+    await update(ref(db, getProfilePath(state.user.uid)), {
+      activeCharacterId: "",
+      updatedAt: now()
+    });
     state.userProfile = await loadUserProfile(state.user.uid);
   }
+
   await loadOwnCharacters();
   notify("Персонаж удалён.");
   renderProfile();
@@ -1466,6 +1490,7 @@ async function chooseUpgradeForCharacter(characterId, matchId = "") {
   if (!requireAuth()) return false;
   const character = getCharacterById(characterId);
   if (!character) return false;
+
   const normalized = normalizeCharacter(character);
   const pending = getPendingChoiceCount(normalized);
   if (pending <= 0) {
@@ -1503,7 +1528,11 @@ async function chooseUpgradeForCharacter(characterId, matchId = "") {
   }
 
   const nextCharacter = addUpgradeToCurrentPool(normalized, finalType, matchId);
-  await update(ref(db, getCharacterPath(state.user.uid, characterId)), { training: nextCharacter.training, updatedAt: now() });
+  await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
+    training: nextCharacter.training,
+    updatedAt: now()
+  });
+
   await loadOwnCharacters();
   await pushFeedEntry({
     type: FEED_TYPES.UPGRADE_GAINED,
@@ -1512,6 +1541,7 @@ async function chooseUpgradeForCharacter(characterId, matchId = "") {
     characterName: nextCharacter.name,
     upgradeLabel: UPGRADE_DEFINITIONS[finalType].label
   });
+
   notify(`Улучшение «${UPGRADE_DEFINITIONS[finalType].label}» получено.`);
   renderProfile();
   return true;
@@ -1522,6 +1552,7 @@ async function promoteApprenticeToWarrior(characterId) {
   const character = getCharacterById(characterId);
   if (!character) return false;
   const normalized = normalizeCharacter(character);
+
   if (normalized.trainingStatus !== "apprentice") {
     notifyError("Этот персонаж уже воитель.");
     return false;
@@ -1529,6 +1560,7 @@ async function promoteApprenticeToWarrior(characterId) {
 
   const apprenticeUpgrades = safeArray(normalized.training.apprenticeUpgrades);
   const transferLimit = getPromotionTransferLimit(apprenticeUpgrades.length);
+
   const ok = await openConfirmModal({
     title: "Посвящение в воители",
     text: transferLimit > 0
@@ -1541,6 +1573,7 @@ async function promoteApprenticeToWarrior(characterId) {
   for (let i = 0; i < transferLimit; i += 1) {
     const remaining = apprenticeUpgrades.filter(item => !selectedIds.includes(item.id));
     if (!remaining.length) break;
+
     const selected = await openChoiceModal({
       title: `Перенос улучшения ${i + 1} из ${transferLimit}`,
       text: "Выбери улучшение, которое нужно сохранить.",
@@ -1548,12 +1581,14 @@ async function promoteApprenticeToWarrior(characterId) {
       confirmLabel: "Сохранить",
       cancelLabel: "Пропустить"
     });
+
     if (!selected) break;
     selectedIds.push(selected);
   }
 
   const transferred = apprenticeUpgrades.filter(item => selectedIds.includes(item.id));
   const next = deepClone(normalized);
+
   next.trainingStatus = "warrior";
   next.training.warriorUpgrades = [
     ...next.training.warriorUpgrades,
@@ -1563,13 +1598,17 @@ async function promoteApprenticeToWarrior(characterId) {
   next.training.promotion.canTransferNow = false;
   next.training.promotion.transferredAt = now();
   next.training.promotion.transferredCount = transferred.length;
-  next.training.promotion.lastTransferSummary = transferred.length ? transferred.map(item => item.label).join(", ") : "без переноса";
+  next.training.promotion.lastTransferSummary = transferred.length
+    ? transferred.map(item => item.label).join(", ")
+    : "без переноса";
+
   next.training.upgradeHistory.unshift({
     id: `promotion_${Math.random().toString(36).slice(2, 9)}`,
     action: "promotion_transfer",
     label: next.training.promotion.lastTransferSummary,
     createdAt: now()
   });
+
   next.updatedAt = now();
 
   await update(ref(db, getCharacterPath(state.user.uid, characterId)), {
@@ -1577,6 +1616,7 @@ async function promoteApprenticeToWarrior(characterId) {
     training: next.training,
     updatedAt: now()
   });
+
   await loadOwnCharacters();
   await pushFeedEntry({
     type: FEED_TYPES.PROMOTION_TRANSFER,
@@ -1585,6 +1625,7 @@ async function promoteApprenticeToWarrior(characterId) {
     characterName: next.name,
     transferSummary: next.training.promotion.lastTransferSummary
   });
+
   notify(`${next.name} посвящён в воители.`);
   renderProfile();
   return true;
@@ -1611,10 +1652,12 @@ async function handleRegister() {
   const accountName = ui.auth.accountName?.value.trim() || "";
   const email = ui.auth.email?.value.trim() || "";
   const password = ui.auth.password?.value.trim() || "";
+
   if (!accountName || !email || !password) {
     notifyError("Заполни имя профиля, почту и пароль.");
     return;
   }
+
   const credentials = await createUserWithEmailAndPassword(auth, email, password);
   await set(ref(db, getProfilePath(credentials.user.uid)), createDefaultProfile(accountName));
   text(ui.auth.status, `Вы вошли как ${accountName}.`);
@@ -1623,10 +1666,12 @@ async function handleRegister() {
 async function handleLogin() {
   const email = ui.auth.email?.value.trim() || "";
   const password = ui.auth.password?.value.trim() || "";
+
   if (!email || !password) {
     notifyError("Впиши почту и пароль.");
     return;
   }
+
   const credentials = await signInWithEmailAndPassword(auth, email, password);
   const profile = await ensureOwnProfile(credentials.user);
   text(ui.auth.status, `Вы вошли как ${profile.displayName || "Зенит"}.`);
@@ -1650,9 +1695,12 @@ async function handleSignedInUser(user) {
   state.userProfile = await loadUserProfile(user.uid);
   if (!state.userProfile) state.userProfile = await ensureOwnProfile(user, "Зенит");
   state.isBlocked = Boolean(state.userProfile?.blocked);
+
   applyTheme(state.userProfile?.themeId || readThemeLocal());
   applyCardStyle(state.userProfile?.cardStyleId || readCardStyleLocal());
+
   await loadOwnCharacters();
+
   text(ui.auth.status, `Вы вошли как ${state.userProfile?.displayName || "Зенит"}.`);
 }
 
@@ -1679,6 +1727,7 @@ function createParticipantFromSelectedCharacter() {
   const characterId = getSelectedCharacterId();
   const character = getCharacterById(characterId);
   if (!characterId || !character) return null;
+
   return {
     uid: state.user.uid,
     profileName: state.userProfile?.displayName || "Зенит",
@@ -1686,7 +1735,7 @@ function createParticipantFromSelectedCharacter() {
     characterName: character.name,
     clan: character.clan || "",
     trainingStatus: character.trainingStatus || "warrior",
-    side: GROUP_MODES.duel.type === "team" ? "A" : "solo",
+    side: "A",
     joinedAt: now()
   };
 }
@@ -1756,7 +1805,7 @@ function getRoomValidation(room) {
   if (directMatch || mirroredMatch) {
     return {
       valid: true,
-      message: `Состав корректный: ${counts.A} на стороне A и ${counts.B} на стороне B.`
+      message: `Состав корректный: ${counts.A} против ${counts.B}.`
     };
   }
 
@@ -1825,6 +1874,7 @@ async function createRoom() {
 
   let roomCode = generateRoomCode();
   let tries = 0;
+
   while (tries < 10) {
     const snapshot = await get(ref(db, getRoomPath(roomCode)));
     if (!snapshot.exists()) break;
@@ -1834,12 +1884,12 @@ async function createRoom() {
 
   await set(ref(db, getRoomPath(roomCode)), createDefaultRoom(roomCode, participant));
 
-state.currentRoomCode = roomCode;
-state.currentParticipantKey = state.user.uid;
-saveActiveRoomLocal(roomCode);
-watchCurrentRoom();
-setScreen("room");
-notify(`Комната ${roomCode} создана.`);
+  state.currentRoomCode = roomCode;
+  state.currentParticipantKey = state.user.uid;
+  saveActiveRoomLocal(roomCode);
+  watchCurrentRoom();
+  setScreen("room");
+  notify(`Комната ${roomCode} создана.`);
 }
 
 async function joinRoom() {
@@ -1849,6 +1899,7 @@ async function joinRoom() {
     notifyError("Впиши код комнаты.");
     return;
   }
+
   const participant = createParticipantFromSelectedCharacter();
   if (!participant) {
     notifyError("Сначала выбери активного персонажа в профиле.");
@@ -1863,7 +1914,8 @@ async function joinRoom() {
   }
 
   const room = normalizeRoom(snapshot.val());
-    if (room.participants[state.user.uid]) {
+
+  if (room.participants[state.user.uid]) {
     state.currentRoomCode = roomCode;
     state.currentParticipantKey = state.user.uid;
     saveActiveRoomLocal(roomCode);
@@ -1897,6 +1949,8 @@ async function joinRoom() {
   state.currentRoomCode = roomCode;
   state.currentParticipantKey = state.user.uid;
   saveActiveRoomLocal(roomCode);
+  watchCurrentRoom();
+  setScreen("room");
   notify(`Вы вошли в комнату ${roomCode}.`);
 }
 
@@ -1904,16 +1958,19 @@ async function tryAutoJoinSavedRoom() {
   if (!state.user) return;
   const saved = readActiveRoomLocal();
   if (!saved?.roomCode) return;
+
   const snapshot = await get(ref(db, getRoomPath(saved.roomCode)));
   if (!snapshot.exists()) {
     clearActiveRoomLocal();
     return;
   }
+
   const room = normalizeRoom(snapshot.val());
   if (!room.participants[state.user.uid]) {
     clearActiveRoomLocal();
     return;
   }
+
   state.currentRoomCode = saved.roomCode;
   state.currentParticipantKey = state.user.uid;
 }
@@ -1923,6 +1980,7 @@ async function leaveRoom() {
     notifyError("Вы сейчас не в комнате.");
     return;
   }
+
   const roomRef = ref(db, getRoomPath(state.currentRoomCode));
   const snapshot = await get(roomRef);
   if (!snapshot.exists()) {
@@ -1931,6 +1989,7 @@ async function leaveRoom() {
     state.currentParticipantKey = "";
     return;
   }
+
   const room = normalizeRoom(snapshot.val());
   if (room.status === "battle") {
     notifyError("Во время тренировки нужно использовать действие «Убежать», а не обычный выход.");
@@ -1961,36 +2020,89 @@ async function leaveRoom() {
   renderRoomIdleState();
 }
 
+async function tryStartBattleAutomatically(room) {
+  const normalized = normalizeRoom(room);
+  if (!normalized || !state.currentRoomCode) return;
+  if (normalized.status === "battle" || normalized.status === "finished") return;
+
+  const validation = getRoomValidation(normalized);
+  if (!validation.valid) return;
+
+  const participants = getParticipantKeys(normalized);
+  if (participants.length < 2) return;
+
+  const everyoneReady = participants.every(uid => Boolean(normalized.readyMap?.[uid]));
+  if (!everyoneReady) return;
+
+  await runTransaction(ref(db, getRoomPath(state.currentRoomCode)), raw => {
+    if (!raw) return raw;
+    const roomTx = normalizeRoom(raw);
+    if (roomTx.status === "battle" || roomTx.status === "finished") return raw;
+    const validationTx = getRoomValidation(roomTx);
+    if (!validationTx.valid) return raw;
+    const participantsTx = getParticipantKeys(roomTx);
+    const everyoneReadyTx = participantsTx.length > 1 && participantsTx.every(uid => Boolean(roomTx.readyMap?.[uid]));
+    if (!everyoneReadyTx) return raw;
+
+    return raw;
+  });
+
+  const fresh = await get(ref(db, getRoomPath(state.currentRoomCode)));
+  if (!fresh.exists()) return;
+  const freshRoom = normalizeRoom(fresh.val());
+  if (freshRoom.status === "battle" || freshRoom.status === "finished") return;
+
+  const battle = await createBattleFromRoom(freshRoom);
+  await update(ref(db, getRoomPath(state.currentRoomCode)), {
+    status: "battle",
+    battle,
+    finishInfo: null,
+    matchId: ""
+  });
+}
+
 async function toggleReady() {
   if (!requireAuth() || !state.currentRoomCode) {
     notifyError("Сначала войди в комнату.");
     return;
   }
+
   const snapshot = await get(ref(db, getRoomPath(state.currentRoomCode)));
   if (!snapshot.exists()) {
     notifyError("Комната больше не существует.");
     return;
   }
+
   const room = normalizeRoom(snapshot.val());
   if (!room.participants[state.user.uid]) {
     notifyError("Ты не участник этой комнаты.");
     return;
   }
+
   if (room.status === "battle") {
     notifyError("Во время боя менять готовность нельзя.");
     return;
   }
+
   const nextReady = !Boolean(room.readyMap?.[state.user.uid]);
+
   await update(ref(db, getRoomPath(state.currentRoomCode)), {
     [`readyMap/${state.user.uid}`]: nextReady,
     status: getParticipantKeys(room).length > 1 ? "ready" : "waiting"
   });
+
   notify(nextReady ? "Готовность подтверждена." : "Готовность снята.");
+
+  const fresh = await get(ref(db, getRoomPath(state.currentRoomCode)));
+  if (fresh.exists()) {
+    await tryStartBattleAutomatically(normalizeRoom(fresh.val()));
+  }
 }
 
 function buildCreditMatrixForPair(selfStatus, enemyStatus) {
   const selfApprentice = selfStatus === "apprentice";
   const enemyApprentice = enemyStatus === "apprentice";
+
   if (!selfApprentice && !enemyApprentice) return { getsCredit: true, reason: "воитель против воителя" };
   if (selfApprentice && enemyApprentice) return { getsCredit: true, reason: "оруженосец против оруженосца" };
   if (selfApprentice && !enemyApprentice) return { getsCredit: true, reason: "оруженосец против воителя" };
@@ -2008,6 +2120,7 @@ async function getCreditPreviewForRoom(room) {
   const normalized = normalizeRoom(room);
   const validation = getRoomValidation(normalized);
   const participants = getParticipantsArray(normalized);
+
   const result = {
     badge: validation.valid ? "Состав почти готов" : "Зачёта не будет",
     reason: validation.message,
@@ -2017,15 +2130,21 @@ async function getCreditPreviewForRoom(room) {
   if (!validation.valid) return result;
 
   const todayKey = getMoscowDateKey();
+
   for (const participant of participants) {
     const charSnap = await get(ref(db, getCharacterPath(participant.uid, participant.characterId)));
     if (!charSnap.exists()) {
       result.eligibleByParticipant[participant.uid] = { getsCredit: false, reason: "Персонаж не найден." };
       continue;
     }
+
     const character = normalizeCharacter(charSnap.val());
+
     if (character.training.progress.lastCreditedDateKey === todayKey) {
-      result.eligibleByParticipant[participant.uid] = { getsCredit: false, reason: `${participant.characterName} уже получил зачёт сегодня.` };
+      result.eligibleByParticipant[participant.uid] = {
+        getsCredit: false,
+        reason: `${participant.characterName} уже получил зачёт сегодня.`
+      };
       continue;
     }
 
@@ -2039,6 +2158,7 @@ async function getCreditPreviewForRoom(room) {
         reasons.push(`${enemy.characterName}: ${matrix.reason}.`);
         continue;
       }
+
       const pairKey = getPairKey(participant.uid, participant.characterId, enemy.uid, enemy.characterId);
       const cdSnap = await get(ref(db, getPairCooldownPath(pairKey)));
       if (cdSnap.exists()) {
@@ -2048,6 +2168,7 @@ async function getCreditPreviewForRoom(room) {
           continue;
         }
       }
+
       allowed = true;
       reasons.push(`${enemy.characterName}: зачёт возможен.`);
     }
@@ -2082,6 +2203,7 @@ function getBattleCountdownLeft(room) {
 function startRoomTimer(deadline) {
   stopRoomTimer();
   if (!deadline) return;
+
   state.roomTimerInterval = setInterval(() => {
     const left = Math.max(0, deadline - now());
     if (ui.room.roomTimer) {
@@ -2154,7 +2276,8 @@ async function createBattleFromRoom(room) {
     roundNumber: 1,
     fighters,
     lastMessage: `Тренировка началась. Первый ход делает ${fighters[queue[0]]?.characterName || "—"}.`,
-    log: [`Тренировка началась. Первый ход делает ${fighters[queue[0]]?.characterName || "—"}.`],
+    log: [],
+    pendingRoundCards: [],
     finished: false,
     winnerSide: "",
     winnerUid: "",
@@ -2209,6 +2332,25 @@ function getCurrentFighterId(battle) {
   return active[0] || "";
 }
 
+function getVisibleTeamForUser(battle, uid) {
+  const me = battle.fighters[uid];
+  if (!me) return new Set();
+  const mode = GROUP_MODES[battle.modeId] || GROUP_MODES.duel;
+  if (mode.type === "ffa") return new Set([uid]);
+  const visible = new Set();
+  Object.keys(battle.fighters).forEach(fighterUid => {
+    const fighter = battle.fighters[fighterUid];
+    if (fighter.side === me.side) visible.add(fighterUid);
+  });
+  return visible;
+}
+
+function shouldShowHpToUser(battle, viewerUid, targetUid) {
+  if (!viewerUid) return false;
+  const visible = getVisibleTeamForUser(battle, viewerUid);
+  return visible.has(targetUid);
+}
+
 function advanceTurnIndex(battle) {
   const active = getAliveFighterIds(battle);
   if (!active.length) return;
@@ -2226,6 +2368,25 @@ function advanceTurnIndex(battle) {
 
 function appendBattleLog(battle, entries) {
   battle.log = [...safeArray(battle.log), ...safeArray(entries)].slice(-MAX_LOG_ITEMS);
+}
+
+function addRoundCard(battle, cardHtml) {
+  battle.pendingRoundCards = [...safeArray(battle.pendingRoundCards), cardHtml];
+}
+
+function flushRoundCardsIfNeeded(battle) {
+  const alive = getAliveFighterIds(battle);
+  if (!alive.length) return;
+  const currentPosition = battle.turnQueue.indexOf(getCurrentFighterId(battle));
+  const wrapped = currentPosition <= 0 || battle.turnIndex === 0;
+  if (!wrapped) return;
+  if (!safeArray(battle.pendingRoundCards).length) return;
+  appendBattleLog(battle, [`
+    <div class="battle-round-stack">
+      ${battle.pendingRoundCards.join("")}
+    </div>
+  `]);
+  battle.pendingRoundCards = [];
 }
 
 function recordAnalyticsForAction(analytics, action, hit) {
@@ -2253,6 +2414,14 @@ function getEnemyFighterIds(battle, uid) {
   return getAliveFighterIds(battle).filter(otherUid => areEnemies(battle, uid, otherUid));
 }
 
+function getTeamAliveIds(battle, side) {
+  return getAliveFighterIds(battle).filter(uid => battle.fighters[uid]?.side === side);
+}
+
+function getTotalHpForIds(battle, ids) {
+  return ids.reduce((sum, uid) => sum + (battle.fighters[uid]?.hp || 0), 0);
+}
+
 function getBattleWinnerState(battle) {
   const mode = GROUP_MODES[battle.modeId] || GROUP_MODES.duel;
   const active = getAliveFighterIds(battle);
@@ -2278,12 +2447,61 @@ function getBattleWinnerState(battle) {
     return { finished: true, winnerSide: "", winnerUid: "", message: "Обе стороны выбыли. Итог — ничья.", finishReason: "double_out" };
   }
   if (!sideA.length) {
-    return { finished: true, winnerSide: "B", winnerUid: "", message: "На стороне B остались бойцы. Победа за стороной B.", finishReason: "team_elimination" };
+    const winners = sideB.map(uid => battle.fighters[uid]?.characterName).filter(Boolean).join(", ");
+    return { finished: true, winnerSide: "B", winnerUid: "", message: `Победа: ${winners}.`, finishReason: "team_elimination" };
   }
   if (!sideB.length) {
-    return { finished: true, winnerSide: "A", winnerUid: "", message: "На стороне A остались бойцы. Победа за стороной A.", finishReason: "team_elimination" };
+    const winners = sideA.map(uid => battle.fighters[uid]?.characterName).filter(Boolean).join(", ");
+    return { finished: true, winnerSide: "A", winnerUid: "", message: `Победа: ${winners}.`, finishReason: "team_elimination" };
   }
   return { finished: false };
+}
+
+function getEscapeOutcomeForDuel(battle, actorUid) {
+  const actor = battle.fighters[actorUid];
+  const enemyUid = getEnemyFighterIds(battle, actorUid)[0];
+  const enemy = battle.fighters[enemyUid];
+  if (!actor || !enemy) {
+    return { finished: true, winnerSide: "", winnerUid: "", message: "Бой завершён.", finishReason: "escape_end" };
+  }
+
+  if (actor.hp > 50) {
+    return {
+      finished: true,
+      winnerSide: "",
+      winnerUid: "",
+      message: `${actor.characterName} уходит из дуэли с запасом сил. Итог — ничья.`,
+      finishReason: "escape_draw"
+    };
+  }
+
+  if (actor.hp > enemy.hp) {
+    return {
+      finished: true,
+      winnerSide: actor.side,
+      winnerUid: actorUid,
+      message: `${actor.characterName} уходит из дуэли на последнем усилии, но перевес по очкам остаётся за ним.`,
+      finishReason: "escape_hp_win"
+    };
+  }
+
+  if (enemy.hp > actor.hp) {
+    return {
+      finished: true,
+      winnerSide: enemy.side,
+      winnerUid: enemyUid,
+      message: `${actor.characterName} пытается уйти из дуэли, но перевес остаётся за ${enemy.characterName}.`,
+      finishReason: "escape_hp_loss"
+    };
+  }
+
+  return {
+    finished: true,
+    winnerSide: "",
+    winnerUid: "",
+    message: `${actor.characterName} уходит из дуэли, и силы оказываются равны. Итог — ничья.`,
+    finishReason: "escape_draw"
+  };
 }
 
 function tryDefenderDodge(defender, defenderName, actionLabel, logs) {
@@ -2362,9 +2580,6 @@ function resolveAttackAction(battle, attackerUid, action, logs) {
     const dotDamage = Math.round(bodyTarget.dotDamage * (1 + (attacker.combat.clawPower || 0) / 100));
     defender.hp = Math.max(0, defender.hp - directDamage);
     defender.effects.pendingDotDamage += dotDamage;
-    if (bodyTarget && attacker.analytics.targets[action.targetKey] !== undefined) {
-      attacker.analytics.targets[action.targetKey] += 1;
-    }
     logs.push(`${attackerName} попадает лапой в ${bodyTarget.label}. Бросок: ${roll} из ${chance}.`);
     logs.push(`${defenderName} теряет ${directDamage}% очков спарринга и получает кровотечение ${dotDamage}% на следующие ходы.`);
     if (defender.hp <= 0) {
@@ -2391,17 +2606,19 @@ function resolveAttackAction(battle, attackerUid, action, logs) {
 
 function applyStartOfTurnEffects(battle, fighterUid, logs) {
   const fighter = battle.fighters[fighterUid];
-  if (!fighter || !fighter.alive || fighter.escaped) return { skipped: true };
+  if (!fighter || !fighter.alive || fighter.escaped) {
+    return { skipped: true, skipReason: "fighter_unavailable" };
+  }
 
   fighter.effects.guardCharges = 0;
 
   if (fighter.effects.dotDamage > 0) {
     fighter.hp = Math.max(0, fighter.hp - fighter.effects.dotDamage);
-    logs.push(`${fighter.characterName} теряет ${fighter.effects.dotDamage}% очков спарринга из-за накопленного ранения.`);
+    logs.push(`${fighter.characterName} теряет ${fighter.effects.dotDamage}% очков спарринга из-за кровотечения.`);
     if (fighter.hp <= 0) {
       fighter.alive = false;
       logs.push(`${fighter.characterName} падает до 0% ещё до действия и выбывает.`);
-      return { skipped: true };
+      return { skipped: true, skipReason: "dead_before_action" };
     }
   }
 
@@ -2411,68 +2628,131 @@ function applyStartOfTurnEffects(battle, fighterUid, logs) {
     if (fighter.effects.accuracyPenaltyTurns > 0) {
       fighter.effects.accuracyPenaltyTurns -= 1;
     }
-    return { skipped: true };
+    return { skipped: true, skipReason: "stunned" };
   }
 
-  return { skipped: false };
+  return { skipped: false, skipReason: "" };
 }
 
 function finalizeEndOfTurn(battle, fighterUid) {
   const fighter = battle.fighters[fighterUid];
   if (!fighter) return;
+
   if (fighter.effects.accuracyPenaltyTurns > 0) {
     fighter.effects.accuracyPenaltyTurns -= 1;
   }
+
   Object.values(battle.fighters).forEach(item => {
     if (item.effects.pendingDotDamage > 0) {
       item.effects.dotDamage += item.effects.pendingDotDamage;
       item.effects.pendingDotDamage = 0;
     }
   });
+
   battle.lastActionAt = now();
   battle.inactivityDeadlineAt = now() + INACTIVITY_TIMEOUT_MS;
 }
 
-function finishBattleObject(battle, outcome, logs) {
+function buildBattleTurnCard(actorName, roundNumber, lines, accent = "default") {
+  const items = safeArray(lines).filter(Boolean);
+  const accentClass =
+    accent === "danger"
+      ? "battle-turn-card-danger"
+      : accent === "good"
+        ? "battle-turn-card-good"
+        : "battle-turn-card-default";
+
+  return `
+    <div class="battle-turn-card ${accentClass}">
+      <div class="battle-turn-card-top">
+        <span class="battle-turn-card-round">Раунд ${roundNumber}</span>
+        <span class="battle-turn-card-actor">${escapeHtml(actorName)}</span>
+      </div>
+      <div class="battle-turn-card-body">
+        ${items.map(item => `<div class="battle-turn-card-line">${escapeHtml(item)}</div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function flushPendingRoundCardsNow(battle) {
+  if (!safeArray(battle.pendingRoundCards).length) return;
+  appendBattleLog(battle, [
+    `<div class="battle-round-stack">${battle.pendingRoundCards.join("")}</div>`
+  ]);
+  battle.pendingRoundCards = [];
+}
+
+function finishBattleObject(battle, outcome, finalCardHtml = "") {
   battle.finished = true;
   battle.completedAt = now();
   battle.winnerSide = outcome.winnerSide || "";
   battle.winnerUid = outcome.winnerUid || "";
   battle.finishReason = outcome.finishReason || "";
   battle.lastMessage = outcome.message || "Тренировка завершена.";
-  logs.push(battle.lastMessage);
-  appendBattleLog(battle, logs);
+
+  if (finalCardHtml) {
+    addRoundCard(battle, finalCardHtml);
+  }
+
+  flushPendingRoundCardsNow(battle);
+
+  appendBattleLog(battle, [
+    `<div class="battle-finish-note">${escapeHtml(battle.lastMessage)}</div>`
+  ]);
 }
 
 function processBattleAction(battle, actorUid, action) {
-  const logs = [`Ход ${battle.roundNumber}. ${battle.fighters[actorUid]?.characterName || "Боец"} действует.`];
   const actor = battle.fighters[actorUid];
-  if (!actor || !actor.alive || actor.escaped) {
+  if (!actor) return;
+
+  const roundNumber = battle.roundNumber;
+  const logs = [];
+  let accent = "default";
+
+  if (!actor.alive || actor.escaped) {
+    addRoundCard(
+      battle,
+      buildBattleTurnCard(actor.characterName || "Боец", roundNumber, ["Не смог продолжить ход."], "danger")
+    );
     advanceTurnIndex(battle);
-    battle.lastMessage = "Ход пропущен.";
-    appendBattleLog(battle, logs);
+    flushRoundCardsIfNeeded(battle);
     return;
   }
 
   const start = applyStartOfTurnEffects(battle, actorUid, logs);
+
   const earlyOutcome = getBattleWinnerState(battle);
   if (earlyOutcome.finished) {
-    finishBattleObject(battle, earlyOutcome, logs);
+    finishBattleObject(
+      battle,
+      earlyOutcome,
+      buildBattleTurnCard(actor.characterName, roundNumber, logs.length ? logs : ["Бой завершается до действия."], "danger")
+    );
     return;
   }
 
   if (start.skipped) {
+    accent = "danger";
     finalizeEndOfTurn(battle, actorUid);
-    battle.lastMessage = logs[logs.length - 1] || "Ход пропущен.";
-    appendBattleLog(battle, logs);
+
+    addRoundCard(
+      battle,
+      buildBattleTurnCard(actor.characterName, roundNumber, logs.length ? logs : ["Ход пропущен."], accent)
+    );
+
     advanceTurnIndex(battle);
+    flushRoundCardsIfNeeded(battle);
+    battle.lastMessage = "Ожидание завершения круга.";
     return;
   }
 
   if (action.kind === "defend") {
     if (actor.effects.dodgesLeft <= 0) {
-      logs.push(`${actor.characterName} хотел уйти в защиту, но у него больше нет доступных уворотов.`);
+      accent = "danger";
+      logs.push(`${actor.characterName} пытается уйти в защиту, но у него закончились увороты.`);
     } else {
+      accent = "good";
       actor.effects.dodgesLeft -= 1;
       actor.effects.guardCharges = 1;
       logs.push(`${actor.characterName} уходит в защиту и готовится уклониться от первого следующего удара.`);
@@ -2480,30 +2760,75 @@ function processBattleAction(battle, actorUid, action) {
   }
 
   if (action.kind === "escape") {
+    const mode = GROUP_MODES[battle.modeId] || GROUP_MODES.duel;
+
+    if (mode.id === "duel") {
+      const outcome = getEscapeOutcomeForDuel(battle, actorUid);
+      finishBattleObject(
+        battle,
+        outcome,
+        buildBattleTurnCard(actor.characterName, roundNumber, [outcome.message], "danger")
+      );
+      return;
+    }
+
+    accent = "danger";
     actor.escaped = true;
-    logs.push(`${actor.characterName} покидает тренировку.`);
+    logs.push(`${actor.characterName} покидает тренировку и выбывает из боя.`);
+
+    finalizeEndOfTurn(battle, actorUid);
+
+    const outcome = getBattleWinnerState(battle);
+    if (outcome.finished) {
+      finishBattleObject(
+        battle,
+        outcome,
+        buildBattleTurnCard(actor.characterName, roundNumber, logs, "danger")
+      );
+      return;
+    }
+
+    addRoundCard(
+      battle,
+      buildBattleTurnCard(actor.characterName, roundNumber, logs, "danger")
+    );
+
+    advanceTurnIndex(battle);
+    flushRoundCardsIfNeeded(battle);
+    battle.lastMessage = "Ожидание завершения круга.";
+    return;
   }
 
   if (action.kind === "multiAttack") {
     const attacks = safeArray(action.actions);
     if (!attacks.length) {
+      accent = "danger";
       logs.push(`${actor.characterName} медлит и не наносит ударов.`);
+    } else {
+      attacks.forEach(item => resolveAttackAction(battle, actorUid, item, logs));
     }
-    attacks.forEach(item => resolveAttackAction(battle, actorUid, item, logs));
   }
 
   finalizeEndOfTurn(battle, actorUid);
 
   const outcome = getBattleWinnerState(battle);
   if (outcome.finished) {
-    finishBattleObject(battle, outcome, logs);
+    finishBattleObject(
+      battle,
+      outcome,
+      buildBattleTurnCard(actor.characterName, roundNumber, logs.length ? logs : ["Ход завершён."], accent)
+    );
     return;
   }
 
-  appendBattleLog(battle, logs);
+  addRoundCard(
+    battle,
+    buildBattleTurnCard(actor.characterName, roundNumber, logs.length ? logs : ["Ход завершён."], accent)
+  );
+
   advanceTurnIndex(battle);
-  const nextId = getCurrentFighterId(battle);
-  battle.lastMessage = `Теперь ход ${battle.fighters[nextId]?.characterName || "следующего бойца"}.`;
+  flushRoundCardsIfNeeded(battle);
+  battle.lastMessage = "Ожидание завершения круга.";
 }
 
 async function submitBattleAction(action) {
@@ -2511,24 +2836,31 @@ async function submitBattleAction(action) {
     notifyError("Сначала войди в комнату.");
     return;
   }
+
   const roomRef = ref(db, getRoomPath(state.currentRoomCode));
   await runTransaction(roomRef, raw => {
     if (!raw) return raw;
     const room = normalizeRoom(raw);
     if (room.status !== "battle" || !room.battle) return raw;
+
     const battle = normalizeBattle(room.battle);
     const actorUid = getCurrentFighterId(battle);
     if (actorUid !== state.user.uid) return raw;
+
     processBattleAction(battle, actorUid, action);
+
     room.battle = battle;
     room.status = battle.finished ? "finished" : "battle";
-    room.finishInfo = battle.finished ? {
-      completedAt: battle.completedAt,
-      winnerSide: battle.winnerSide,
-      winnerUid: battle.winnerUid,
-      reason: battle.finishReason,
-      message: battle.lastMessage
-    } : null;
+    room.finishInfo = battle.finished
+      ? {
+          completedAt: battle.completedAt,
+          winnerSide: battle.winnerSide,
+          winnerUid: battle.winnerUid,
+          reason: battle.finishReason,
+          message: battle.lastMessage
+        }
+      : null;
+
     return room;
   });
 }
@@ -2542,16 +2874,19 @@ function startAttackPlanning() {
   const room = state.currentRoomSnapshot ? normalizeRoom(state.currentRoomSnapshot) : null;
   const battle = room?.battle ? normalizeBattle(room.battle) : null;
   if (!battle) return;
+
   const actorUid = getCurrentFighterId(battle);
-  if (actorUid !== state.user.uid) {
+  if (actorUid !== state.user?.uid) {
     notifyError("Сейчас ходит не ваш персонаж.");
     return;
   }
+
   const targets = getEnemyFighterIds(battle, actorUid);
   if (!targets.length) {
     notifyError("У вашего персонажа не осталось живых противников.");
     return;
   }
+
   state.planningAttack = {
     actorUid,
     targets,
@@ -2559,6 +2894,7 @@ function startAttackPlanning() {
     actions: [],
     pendingType: ""
   };
+
   show(ui.battle.attackMenu);
   hide(ui.battle.actions);
   hide(ui.battle.targetMenu);
@@ -2567,19 +2903,25 @@ function startAttackPlanning() {
 
 function updatePlanningBadge() {
   if (!state.planningAttack) {
-    text(ui.battle.opponentChosenBadge, "Соперник ещё думает");
+    text(ui.battle.opponentChosenBadge, "Ожидание действий");
     return;
   }
+
   const room = state.currentRoomSnapshot ? normalizeRoom(state.currentRoomSnapshot) : null;
   const battle = room?.battle ? normalizeBattle(room.battle) : null;
   if (!battle) return;
+
   const currentTargetId = state.planningAttack.targets[state.planningAttack.index];
   const fighter = battle.fighters[currentTargetId];
-  text(ui.battle.opponentChosenBadge, `Цель ${state.planningAttack.index + 1}/${state.planningAttack.targets.length}: ${fighter?.characterName || "—"}`);
+  text(
+    ui.battle.opponentChosenBadge,
+    `Цель ${state.planningAttack.index + 1}/${state.planningAttack.targets.length}: ${fighter?.characterName || "—"}`
+  );
 }
 
 function commitPlannedAttackStep(actionPayload) {
   if (!state.planningAttack) return;
+
   const targetUid = state.planningAttack.targets[state.planningAttack.index];
   state.planningAttack.actions.push({ ...actionPayload, targetUid });
   state.planningAttack.index += 1;
@@ -2607,10 +2949,9 @@ function showBattleMainActions() {
   updatePlanningBadge();
 }
 
-function setBattleButtonsDisabled(disabled) {
+function setBattleButtonsDisabled(disabled, defendDisabled = false) {
   [
     ui.battle.attackActionBtn,
-    ui.battle.defendActionBtn,
     ui.battle.escapeActionBtn,
     ui.battle.sandAttackBtn,
     ui.battle.pawAttackBtn,
@@ -2624,14 +2965,34 @@ function setBattleButtonsDisabled(disabled) {
     ui.battle.earsTargetBtn,
     ui.battle.neckTargetBtn
   ].forEach(node => disable(node, disabled));
+
+  disable(ui.battle.defendActionBtn, disabled || defendDisabled);
 }
 
-function renderBattleBars(battle) {
-  return getAliveFighterIds(battle).concat(
+function renderBattleBars(battle, viewerUid) {
+  const orderedIds = getAliveFighterIds(battle).concat(
     Object.keys(battle.fighters).filter(uid => !getAliveFighterIds(battle).includes(uid))
-  ).map(uid => {
+  );
+
+  return orderedIds.map(uid => {
     const fighter = battle.fighters[uid];
+    const isVisible = shouldShowHpToUser(battle, viewerUid, uid);
     const deadLabel = !fighter.alive ? " · выбыл" : fighter.escaped ? " · ушёл" : "";
+
+    if (!isVisible) {
+      return `
+        <div class="battle-bar-card battle-bar-card-hidden">
+          <div class="battle-bar-top">
+            <span>${escapeHtml(fighter.characterName)}${escapeHtml(deadLabel)}</span>
+            <strong>✦✦✦</strong>
+          </div>
+          <div class="battle-bar-track battle-bar-track-hidden">
+            <div class="battle-bar-fill battle-bar-fill-hidden" style="width:100%"></div>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="battle-bar-card">
         <div class="battle-bar-top">
@@ -2646,6 +3007,43 @@ function renderBattleBars(battle) {
   }).join("");
 }
 
+function getDodgeSymbols(left) {
+  const safeLeft = clamp(left || 0, 0, MAX_DODGES);
+  let result = "";
+  for (let i = 0; i < MAX_DODGES; i += 1) {
+    result += i < safeLeft ? "✦" : "✧";
+  }
+  return result;
+}
+
+function renderMyBattleEffects(fighter) {
+  if (!fighter) return "";
+  const stunned = fighter.effects.stunTurns > 0 ? "Да" : "Нет";
+  const bleeding = fighter.effects.dotDamage > 0 ? `🩸 ${fighter.effects.dotDamage}%` : "Спокойно";
+  const penalty = fighter.effects.accuracyPenaltyTurns > 0 ? `☾ ${fighter.effects.accuracyPenaltyTurns} х.` : "Чистый взгляд";
+
+  return `
+    <div class="battle-effects-grid">
+      <div class="battle-effect-chip">
+        <span class="battle-effect-chip-label">Увороты</span>
+        <strong>${escapeHtml(getDodgeSymbols(fighter.effects.dodgesLeft))}</strong>
+      </div>
+      <div class="battle-effect-chip">
+        <span class="battle-effect-chip-label">Кровотечение</span>
+        <strong>${escapeHtml(bleeding)}</strong>
+      </div>
+      <div class="battle-effect-chip">
+        <span class="battle-effect-chip-label">Оглушение</span>
+        <strong>${escapeHtml(stunned)}</strong>
+      </div>
+      <div class="battle-effect-chip">
+        <span class="battle-effect-chip-label">Точность</span>
+        <strong>${escapeHtml(penalty)}</strong>
+      </div>
+    </div>
+  `;
+}
+
 function setBattleLog(logItems) {
   const items = safeArray(logItems);
   if (!items.length) {
@@ -2657,12 +3055,16 @@ function setBattleLog(logItems) {
     `);
     return;
   }
-  html(ui.battle.log, items.map((item, index) => `
-    <div class="battle-log-entry ${index === items.length - 1 ? "battle-log-entry-latest" : ""}">
-      <div class="battle-log-mark">✦</div>
-      <div class="battle-log-text">${escapeHtml(item)}</div>
-    </div>
-  `).join(""));
+
+  html(ui.battle.log, items.map((item, index) => {
+    const isHtml = String(item).trim().startsWith("<");
+    return `
+      <div class="battle-log-entry ${index === items.length - 1 ? "battle-log-entry-latest" : ""}">
+        <div class="battle-log-mark">✦</div>
+        <div class="battle-log-text">${isHtml ? item : escapeHtml(item)}</div>
+      </div>
+    `;
+  }).join(""));
 }
 
 function renderBattleForPlayer(room, battle) {
@@ -2670,24 +3072,39 @@ function renderBattleForPlayer(room, battle) {
   const isMine = currentUid === state.user?.uid;
   const currentFighter = battle.fighters[currentUid];
   const myFighter = state.user ? battle.fighters[state.user.uid] : null;
-  const myEnemies = myFighter ? getEnemyFighterIds(battle, state.user.uid).map(uid => battle.fighters[uid]?.characterName).filter(Boolean) : [];
+  const myEnemies = myFighter
+    ? getEnemyFighterIds(battle, state.user.uid).map(uid => battle.fighters[uid]?.characterName).filter(Boolean)
+    : [];
 
   html(ui.battle.info, `
     <div class="battle-status-shell">
       <div class="battle-status-top">
-        <span class="battle-chip ${isMine ? "battle-chip-active" : "battle-chip-soft"}">Ход: ${escapeHtml(currentFighter?.characterName || "—")}</span>
+        <span class="battle-chip ${isMine ? "battle-chip-active" : "battle-chip-soft"}">
+          ${isMine ? "Ваш ход" : "Ожидание хода"}
+        </span>
         <span class="battle-chip">Режим: ${escapeHtml(getModeLabel(battle.modeId))}</span>
         <span class="battle-chip">Раунд: ${battle.roundNumber}</span>
       </div>
-      <div class="battle-bars-wrap">${renderBattleBars(battle)}</div>
+
+      <div class="battle-bars-wrap">${renderBattleBars(battle, state.user?.uid)}</div>
+
       <div class="battle-message">
         <div class="battle-message-title">✦ Текущее состояние</div>
-        <div class="battle-message-text">${escapeHtml(battle.lastMessage || "—")}</div>
+        <div class="battle-message-text">
+          ${escapeHtml(
+            battle.finished
+              ? battle.lastMessage || "Тренировка завершена."
+              : isMine
+                ? "Можно выбирать действие."
+                : "Ждём завершения круга."
+          )}
+        </div>
       </div>
+
+      ${myFighter ? renderMyBattleEffects(myFighter) : ""}
+
       <div class="battle-plan-line">
-        ${myFighter
-          ? `Ваш персонаж: ${escapeHtml(myFighter.characterName)}. Уворотов осталось: ${myFighter.effects.dodgesLeft}.`
-          : "Вы наблюдатель в этой комнате."}
+        ${myFighter ? `Ваш персонаж: ${escapeHtml(myFighter.characterName)}.` : "Вы наблюдатель в этой комнате."}
         ${myEnemies.length ? `<div class="battle-plan-targets">Противники: ${escapeHtml(myEnemies.join(", "))}</div>` : ""}
       </div>
     </div>
@@ -2695,13 +3112,15 @@ function renderBattleForPlayer(room, battle) {
 
   setBattleLog(battle.log);
 
+  const defendDisabled = !myFighter || myFighter.effects.dodgesLeft <= 0;
+
   if (battle.finished || !isMine || !myFighter || !myFighter.alive || myFighter.escaped) {
-    setBattleButtonsDisabled(true);
+    setBattleButtonsDisabled(true, true);
     showBattleMainActions();
     return;
   }
 
-  setBattleButtonsDisabled(false);
+  setBattleButtonsDisabled(false, defendDisabled);
   if (!state.planningAttack) showBattleMainActions();
   updatePlanningBadge();
 }
@@ -2714,16 +3133,73 @@ function renderBattleForAdmin(room, battle) {
         <span class="battle-chip">Режим: ${escapeHtml(getModeLabel(battle.modeId))}</span>
         <span class="battle-chip">Раунд: ${battle.roundNumber}</span>
       </div>
-      <div class="battle-bars-wrap">${renderBattleBars(battle)}</div>
+      <div class="battle-bars-wrap">${renderBattleBars(battle, "")}</div>
       <div class="battle-message">
         <div class="battle-message-title">✦ Состояние</div>
         <div class="battle-message-text">${escapeHtml(battle.lastMessage || "—")}</div>
       </div>
     </div>
   `);
+
   setBattleLog(battle.log);
-  setBattleButtonsDisabled(true);
+  setBattleButtonsDisabled(true, true);
   showBattleMainActions();
+}
+
+function getSideDisplayNames(room) {
+  const normalized = normalizeRoom(room);
+  const mode = GROUP_MODES[normalized.modeId] || GROUP_MODES.duel;
+
+  if (mode.type === "ffa") {
+    return { solo: "Каждый сам за себя" };
+  }
+
+  const participants = getParticipantsArray(normalized);
+  const sideA = participants.filter(item => item.side === "A");
+  const sideB = participants.filter(item => item.side === "B");
+
+  return {
+    A: sideA[0]?.characterName ? `Отряд ${sideA[0].characterName}` : "Левая сторона",
+    B: sideB[0]?.characterName ? `Отряд ${sideB[0].characterName}` : "Правая сторона"
+  };
+}
+
+function renderRoomParticipantCard(participant, room, sideNames) {
+  const isMe = participant.uid === state.user?.uid;
+  const ready = Boolean(room.readyMap?.[participant.uid]);
+  const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
+
+  const sideLabel = mode.type === "ffa"
+    ? "Сам за себя"
+    : (participant.side === "A" ? sideNames.A : sideNames.B);
+
+  const sideControl =
+    room.status === "battle" ||
+    room.status === "finished" ||
+    !isMe ||
+    !canCurrentUserChangeOwnSide(room) ||
+    mode.type === "ffa"
+      ? `<div class="room-sigil-side-value">${escapeHtml(sideLabel)}</div>`
+      : `
+        <select class="field-select participant-side-select" data-side-uid="${escapeHtml(participant.uid)}">
+          <option value="A" ${participant.side === "A" ? "selected" : ""}>${escapeHtml(sideNames.A)}</option>
+          <option value="B" ${participant.side === "B" ? "selected" : ""}>${escapeHtml(sideNames.B)}</option>
+        </select>
+      `;
+
+  return `
+    <div class="room-sigil-card ${isMe ? "room-sigil-card-self" : ""}">
+      <div class="room-sigil-top">
+        <div class="room-sigil-name">${escapeHtml(participant.characterName)}</div>
+        <div class="room-sigil-ready ${ready ? "room-sigil-ready-yes" : "room-sigil-ready-no"}">
+          ${ready ? "Готов" : "Не готов"}
+        </div>
+      </div>
+      <div class="room-sigil-meta">${escapeHtml(participant.profileName)} · ${escapeHtml(getTrainingStatusLabel(participant.trainingStatus))}</div>
+      <div class="room-sigil-meta">${escapeHtml(participant.clan || "Без племени")}</div>
+      <div class="room-sigil-side">${sideControl}</div>
+    </div>
+  `;
 }
 
 function renderRoomPlayers(room) {
@@ -2739,37 +3215,41 @@ function renderRoomPlayers(room) {
   }
 
   const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
+  const sideNames = getSideDisplayNames(room);
 
-  html(ui.room.roomPlayers, `
-    <div class="room-players-grid">
-      ${participants.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0)).map(participant => {
-        const isMe = participant.uid === state.user?.uid;
-        const ready = Boolean(room.readyMap?.[participant.uid]);
-        return `
-          <div class="room-player-card">
-            <div class="room-player-label">${isMe ? "Вы" : "Игрок"}${room.createdBy === participant.uid ? " · создатель" : ""}</div>
-            <div class="room-player-name">${escapeHtml(participant.characterName)}</div>
-            <div class="room-player-character">${escapeHtml(participant.profileName)} · ${escapeHtml(getTrainingStatusLabel(participant.trainingStatus))}</div>
-            <div class="room-player-character">${escapeHtml(participant.clan || "Без племени")}</div>
-            <div class="room-player-side-label">Сторона</div>
-            ${room.status === "battle" || room.status === "finished" || !isMe || !canCurrentUserChangeOwnSide(room)
-              ? `<div class="room-player-side-value">${escapeHtml(getSideLabel(participant.side, room.modeId))}</div>`
-              : mode.type === "ffa"
-                ? `<div class="room-player-side-value">Сам за себя</div>`
-                : `
-                  <div class="group-inline-select">
-                    <select class="field-select participant-side-select" data-side-uid="${escapeHtml(participant.uid)}">
-                      <option value="A" ${participant.side === "A" ? "selected" : ""}>Сторона A</option>
-                      <option value="B" ${participant.side === "B" ? "selected" : ""}>Сторона B</option>
-                    </select>
-                  </div>
-                `}
-            <div class="room-player-ready">${ready ? "Готов" : "Не готов"}</div>
+  if (mode.type === "ffa") {
+    html(ui.room.roomPlayers, `
+      <div class="room-ffa-grid">
+        ${participants
+          .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0))
+          .map(participant => renderRoomParticipantCard(participant, room, sideNames))
+          .join("")}
+      </div>
+    `);
+  } else {
+    const sideA = participants.filter(item => item.side === "A");
+    const sideB = participants.filter(item => item.side === "B");
+
+    html(ui.room.roomPlayers, `
+      <div class="room-vs-shell">
+        <div class="room-vs-column">
+          <div class="room-vs-title">${escapeHtml(sideNames.A)}</div>
+          <div class="room-vs-list">
+            ${sideA.map(item => renderRoomParticipantCard(item, room, sideNames)).join("") || `<div class="empty-inline">Пусто</div>`}
           </div>
-        `;
-      }).join("")}
-    </div>
-  `);
+        </div>
+
+        <div class="room-vs-mark">VS</div>
+
+        <div class="room-vs-column">
+          <div class="room-vs-title">${escapeHtml(sideNames.B)}</div>
+          <div class="room-vs-list">
+            ${sideB.map(item => renderRoomParticipantCard(item, room, sideNames)).join("") || `<div class="empty-inline">Пусто</div>`}
+          </div>
+        </div>
+      </div>
+    `);
+  }
 
   ui.room.roomPlayers.querySelectorAll(".participant-side-select").forEach(select => {
     select.addEventListener("change", event => {
@@ -2781,17 +3261,25 @@ function renderRoomPlayers(room) {
 }
 
 function renderCreditPreview(room) {
-  const preview = room.creditPreview || { badge: "Зачёта не будет", reason: "Сначала собери корректный состав комнаты.", eligibleByParticipant: {} };
+  const preview = room.creditPreview || {
+    badge: "Зачёта не будет",
+    reason: "Сначала собери корректный состав комнаты.",
+    eligibleByParticipant: {}
+  };
+
   text(ui.room.creditBadge, preview.badge || "Зачёта не будет");
 
-  const lines = [preview.reason || "—"];
   const participants = getParticipantsArray(room);
-  participants.forEach(participant => {
+  const lines = participants.map(participant => {
     const item = preview.eligibleByParticipant?.[participant.uid];
-    if (!item) return;
-    lines.push(`${participant.characterName}: ${item.getsCredit ? "зачёт возможен" : "без зачёта"}. ${item.reason || ""}`);
+    if (!item) return `${participant.characterName}: данных пока нет.`;
+    return `${participant.characterName}: ${item.getsCredit ? "зачёт возможен" : "без зачёта"}. ${item.reason || ""}`;
   });
-  text(ui.room.creditReasonBox, lines.join(" "));
+
+  text(
+    ui.room.creditReasonBox,
+    [preview.reason || "—", ...lines].join(" ")
+  );
 }
 
 function renderWaitingState(room) {
@@ -2801,28 +3289,64 @@ function renderWaitingState(room) {
   const everyoneReady = participants.length > 1 && participants.every(item => Boolean(room.readyMap?.[item.uid]));
   const startAllowed = validation.valid && everyoneReady;
 
+  const names = getSideDisplayNames(room);
+
   html(ui.room.waitingStateBox, `
-    <div class="waiting-pretty-card">
-      <div class="waiting-pretty-title">${escapeHtml(mode.label)}</div>
-      <div class="waiting-pretty-text">${escapeHtml(mode.description)}</div>
-      <div class="waiting-pretty-text ${validation.valid ? "group-valid-good" : "group-valid-bad"}">${escapeHtml(validation.message)}</div>
-      <div class="waiting-pretty-text">${everyoneReady ? "Все участники готовы." : "Нужна готовность всех участников."}</div>
-      ${startAllowed ? `<div class="waiting-pretty-timer">Можно начинать тренировку</div>` : ""}
+    <div class="waiting-seal-card">
+      <div class="waiting-seal-top">
+        <div class="waiting-seal-title">${escapeHtml(mode.label)}</div>
+        <div class="waiting-seal-badge ${startAllowed ? "waiting-seal-badge-good" : "waiting-seal-badge-soft"}">
+          ${startAllowed ? "Можно начинать" : "Сбор продолжается"}
+        </div>
+      </div>
+
+      <div class="waiting-seal-text">${escapeHtml(mode.description)}</div>
+      <div class="waiting-seal-text ${validation.valid ? "group-valid-good" : "group-valid-bad"}">${escapeHtml(validation.message)}</div>
+      <div class="waiting-seal-text">${everyoneReady ? "Все участники подтвердили готовность." : "Нужна готовность всех участников."}</div>
+
+      ${mode.type !== "ffa" ? `
+        <div class="waiting-side-summary">
+          <div class="waiting-side-chip">${escapeHtml(names.A)}</div>
+          <div class="waiting-side-chip waiting-side-chip-vs">VS</div>
+          <div class="waiting-side-chip">${escapeHtml(names.B)}</div>
+        </div>
+      ` : ``}
     </div>
   `);
 
   const modeSelect = byId("groupModeSelect");
   const modeHelp = byId("groupModeHelp");
   const modeValidity = byId("groupModeValidity");
+
   if (modeSelect) {
     modeSelect.value = room.modeId;
     modeSelect.disabled = !canCurrentUserChangeMode(room);
   }
+
   if (modeHelp) text(modeHelp, mode.description);
   if (modeValidity) {
     modeValidity.textContent = validation.message;
     modeValidity.className = `training-credit-reason ${validation.valid ? "group-valid-good" : "group-valid-bad"}`;
   }
+}
+
+function getRoomWinTitle(room) {
+  const battle = room.battle ? normalizeBattle(room.battle) : null;
+  if (!battle) return "Тренировка завершена";
+
+  if (battle.finishReason === "timeout_unfinished") return "Тренировка завершена без зачёта";
+  if (!battle.winnerSide && !battle.winnerUid) return "Ничья";
+
+  if (battle.winnerUid && battle.fighters[battle.winnerUid]) {
+    return `Победа: ${battle.fighters[battle.winnerUid].characterName}`;
+  }
+
+  const winners = Object.values(battle.fighters)
+    .filter(fighter => fighter.side === battle.winnerSide)
+    .map(fighter => fighter.characterName)
+    .join(", ");
+
+  return winners ? `Победа: ${winners}` : "Тренировка завершена";
 }
 
 function renderRoomResultCard(room) {
@@ -2832,17 +3356,13 @@ function renderRoomResultCard(room) {
   }
 
   const battle = room.battle ? normalizeBattle(room.battle) : null;
-  let title = "Тренировка завершена";
-  if (battle?.winnerUid && battle.fighters[battle.winnerUid]) title = `Победитель — ${battle.fighters[battle.winnerUid].characterName}`;
-  else if (battle?.winnerSide) title = `Победа стороны ${battle.winnerSide}`;
-  else if (battle?.finishReason === "timeout_unfinished") title = "Тренировка завершена без зачёта";
-  else title = "Ничья";
 
   html(ui.room.roomResultCard, `
-    <div class="result-pretty-card">
-      <div class="result-pretty-title">${escapeHtml(title)}</div>
-      <div class="waiting-pretty-text">${escapeHtml(room.finishInfo?.message || battle?.lastMessage || "Тренировка закончена.")}</div>
-      ${battle ? `<div class="result-pretty-bars">${renderBattleBars(battle)}</div>` : ""}
+    <div class="result-victory-card">
+      <div class="result-victory-crown">✦</div>
+      <div class="result-victory-title">${escapeHtml(getRoomWinTitle(room))}</div>
+      <div class="result-victory-text">${escapeHtml(room.finishInfo?.message || battle?.lastMessage || "Тренировка закончена.")}</div>
+      ${battle ? `<div class="result-victory-bars">${renderBattleBars(battle, state.user?.uid)}</div>` : ""}
     </div>
   `);
 }
@@ -2853,11 +3373,14 @@ function setRoomStatus(message) {
 
 function renderRoomBadge(roomCode = "", roomStatus = "") {
   if (!ui.shell.currentRoomBadge) return;
+
   ui.shell.currentRoomBadge.classList.toggle("hidden", !roomCode);
+
   if (!roomCode) {
     text(ui.shell.currentRoomBadge, "✦ Комната: —");
     return;
   }
+
   text(ui.shell.currentRoomBadge, `✦ Комната ${roomCode}${roomStatus ? ` · ${getRoomStatusLabel(roomStatus)}` : ""}`);
 }
 
@@ -2885,11 +3408,15 @@ function renderRoom(roomCode, rawRoom) {
   state.currentRoomSnapshot = room;
   state.currentRoomCode = roomCode;
   state.currentParticipantKey = room.participants[state.user?.uid] ? state.user.uid : "";
+
   renderRoomBadge(roomCode, room.status);
   renderRoomPlayers(room);
   renderCreditPreview(room);
   renderWaitingState(room);
   renderRoomResultCard(room);
+
+  text(ui.room.playerNameMirror, state.userProfile?.displayName || "—");
+  text(ui.room.activeCharacterMirror, getCharacterById(getSelectedCharacterId())?.name || "—");
 
   const participants = getParticipantsArray(room);
   const validation = getRoomValidation(room);
@@ -2926,8 +3453,9 @@ function renderRoom(roomCode, rawRoom) {
   }
 
   show(ui.battle.screen);
+
   if (room.status === "battle") {
-    lines.push(`Сейчас ходит: ${battle.fighters[getCurrentFighterId(battle)]?.characterName || "—"}`);
+    lines.push(`Круг собирается. Отдельные карточки появятся после завершения круга.`);
     startRoomTimer(now() + getBattleCountdownLeft(room));
   }
 
@@ -2943,13 +3471,47 @@ function renderRoom(roomCode, rawRoom) {
 async function maybeShowRoomRules(roomCode) {
   if (!roomCode || !state.user || state.modalResolver) return;
   if (hasReadRulesForRoom(roomCode)) return;
+
   const accepted = await openInfoModal({
     title: "Правила тренировки",
     bodyHtml: getRoomRulesHtml(),
     confirmLabel: "Я понял",
     allowClose: false
   });
+
   if (accepted) markRulesReadForRoom(roomCode);
+}
+
+async function finishBattleAsUnfinished(roomCode, reasonText) {
+  const roomRef = ref(db, getRoomPath(roomCode));
+  await runTransaction(roomRef, raw => {
+    if (!raw) return raw;
+    const room = normalizeRoom(raw);
+    if (room.status !== "battle" || !room.battle) return raw;
+
+    const battle = normalizeBattle(room.battle);
+    battle.finished = true;
+    battle.completedAt = now();
+    battle.finishReason = "timeout_unfinished";
+    battle.lastMessage = reasonText;
+
+    flushPendingRoundCardsNow(battle);
+    appendBattleLog(battle, [
+      `<div class="battle-finish-note">${escapeHtml(reasonText)}</div>`
+    ]);
+
+    room.battle = battle;
+    room.status = "finished";
+    room.finishInfo = {
+      completedAt: battle.completedAt,
+      winnerSide: "",
+      winnerUid: "",
+      reason: battle.finishReason,
+      message: reasonText
+    };
+
+    return room;
+  });
 }
 
 async function ensureRoomTimeouts(roomCode, room) {
@@ -2964,31 +3526,6 @@ async function ensureRoomTimeouts(roomCode, room) {
   }
 }
 
-async function finishBattleAsUnfinished(roomCode, reasonText) {
-  const roomRef = ref(db, getRoomPath(roomCode));
-  await runTransaction(roomRef, raw => {
-    if (!raw) return raw;
-    const room = normalizeRoom(raw);
-    if (room.status !== "battle" || !room.battle) return raw;
-    const battle = normalizeBattle(room.battle);
-    battle.finished = true;
-    battle.completedAt = now();
-    battle.finishReason = "timeout_unfinished";
-    battle.lastMessage = reasonText;
-    appendBattleLog(battle, [reasonText]);
-    room.battle = battle;
-    room.status = "finished";
-    room.finishInfo = {
-      completedAt: battle.completedAt,
-      winnerSide: "",
-      winnerUid: "",
-      reason: battle.finishReason,
-      message: reasonText
-    };
-    return room;
-  });
-}
-
 function cleanupRoomWatcher() {
   if (typeof state.unsubscribeRoom === "function") {
     state.unsubscribeRoom();
@@ -2998,10 +3535,12 @@ function cleanupRoomWatcher() {
 
 function watchCurrentRoom() {
   cleanupRoomWatcher();
+
   if (!state.currentRoomCode) {
     renderRoomIdleState();
     return;
   }
+
   const roomRef = ref(db, getRoomPath(state.currentRoomCode));
   state.unsubscribeRoom = onValue(roomRef, snapshot => {
     if (!snapshot.exists()) {
@@ -3011,28 +3550,52 @@ function watchCurrentRoom() {
       renderRoomIdleState();
       return;
     }
+
     const room = normalizeRoom(snapshot.val());
     state.currentRoomSnapshot = room;
+
     renderRoom(state.currentRoomCode, room);
     ensureRoomTimeouts(state.currentRoomCode, room).catch(console.error);
+
     if (room.status !== "battle" && room.status !== "finished") {
-      getCreditPreviewForRoom(room).then(preview => {
-        update(ref(db, getRoomPath(state.currentRoomCode)), { creditPreview: preview }).catch(() => {});
-      }).catch(console.error);
+      getCreditPreviewForRoom(room)
+        .then(preview => update(ref(db, getRoomPath(state.currentRoomCode)), { creditPreview: preview }).catch(() => {}))
+        .catch(console.error);
+
+      tryStartBattleAutomatically(room).catch(console.error);
     }
+
     if (room.status === "finished") {
       saveFinishedMatchIfNeeded(state.currentRoomCode, room).catch(error => {
         console.error(error);
         notifyError(`Не удалось сохранить итог тренировки: ${error.message}`);
       });
     }
+
     maybeShowRoomRules(state.currentRoomCode).catch(console.error);
   });
+}
+
+async function claimMatchWrite(roomCode) {
+  const token = `claim_${state.user?.uid || "anon"}_${now()}`;
+  const result = await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+    if (!raw) return raw;
+    const room = normalizeRoom(raw);
+    if (room.matchId) return;
+    raw.matchId = token;
+    return raw;
+  });
+
+  if (!result.committed) return null;
+  const value = result.snapshot.val();
+  if (!value?.matchId || value.matchId !== token) return null;
+  return token;
 }
 
 function createHistoryRecordPayload(roomCode, room, preview) {
   const battle = room.battle ? normalizeBattle(room.battle) : null;
   const participants = getParticipantsArray(room);
+
   return {
     roomCode,
     finishedAt: battle?.completedAt || room.finishInfo?.completedAt || now(),
@@ -3056,22 +3619,43 @@ function getParticipantResult(room, uid) {
   const battle = room.battle ? normalizeBattle(room.battle) : null;
   if (!battle) return RESULT_TYPES.UNFINISHED;
   if (battle.finishReason === "timeout_unfinished") return RESULT_TYPES.UNFINISHED;
+
   const fighter = battle.fighters[uid];
   if (!fighter) return RESULT_TYPES.UNFINISHED;
-  const winner = getBattleWinnerState(battle);
-  if (!winner.finished) return RESULT_TYPES.UNFINISHED;
-  if (!winner.winnerSide && !winner.winnerUid) return RESULT_TYPES.DRAW;
-  if (winner.winnerUid) return winner.winnerUid === uid ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
-  return fighter.side === winner.winnerSide ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
+
+  if (!battle.winnerSide && !battle.winnerUid) return RESULT_TYPES.DRAW;
+
+  const mode = GROUP_MODES[battle.modeId] || GROUP_MODES.duel;
+
+  if (mode.type === "ffa") {
+    if (battle.winnerUid) return battle.winnerUid === uid ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
+    return RESULT_TYPES.DRAW;
+  }
+
+  if (battle.winnerUid && battle.fighters[battle.winnerUid]) {
+    return battle.fighters[battle.winnerUid].side === fighter.side ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
+  }
+
+  if (!battle.winnerSide) return RESULT_TYPES.DRAW;
+  return fighter.side === battle.winnerSide ? RESULT_TYPES.WIN : RESULT_TYPES.LOSS;
 }
 
-function applyBattleOutcomeToCharacter({ character, resultType, opponentName, finishedAt, creditGranted, creditReason, analyticsDelta }) {
+function applyBattleOutcomeToCharacter({
+  character,
+  resultType,
+  opponentName,
+  finishedAt,
+  creditGranted,
+  creditReason,
+  analyticsDelta
+}) {
   const next = deepClone(normalizeCharacter(character));
   const thresholds = getThresholdsForStatus(next.trainingStatus);
 
   if (resultType === RESULT_TYPES.WIN) next.profileStats.wins += 1;
   if (resultType === RESULT_TYPES.LOSS) next.profileStats.losses += 1;
   if (resultType === RESULT_TYPES.DRAW) next.profileStats.draws += 1;
+
   next.profileStats.lastBattleAt = finishedAt;
   next.profileStats.lastOpponentName = opponentName || "";
 
@@ -3119,9 +3703,11 @@ function applyBattleOutcomeToCharacter({ character, resultType, opponentName, fi
     const earnedByWins = Math.floor(next.training.progress.winsTowardUpgrade / thresholds.wins);
     const earnedByLosses = Math.floor(next.training.progress.lossesTowardUpgrade / thresholds.losses);
     const earnedNow = earnedByWins + earnedByLosses;
+
     if (earnedNow > 0) {
       next.training.progress.winsTowardUpgrade -= earnedByWins * thresholds.wins;
       next.training.progress.lossesTowardUpgrade -= earnedByLosses * thresholds.losses;
+
       const withPoints = addPendingUpgradePoints(next, earnedNow);
       next.training = withPoints.training;
     }
@@ -3133,35 +3719,53 @@ function applyBattleOutcomeToCharacter({ character, resultType, opponentName, fi
 
 async function saveFinishedMatchIfNeeded(roomCode, room) {
   if (!room || room.status !== "finished") return;
-  if (room.matchId) return;
+  if (room.matchId && !String(room.matchId).startsWith("claim_")) return;
 
-  const preview = room.creditPreview || await getCreditPreviewForRoom(room);
+  const currentMatchId = room.matchId;
+  let claimToken = currentMatchId;
+
+  if (!currentMatchId || !String(currentMatchId).startsWith("claim_")) {
+    const claimed = await claimMatchWrite(roomCode);
+    if (!claimed) return;
+    claimToken = claimed;
+  }
+
+  const latestRoomSnap = await get(ref(db, getRoomPath(roomCode)));
+  if (!latestRoomSnap.exists()) return;
+  const latestRoom = normalizeRoom(latestRoomSnap.val());
+  if (latestRoom.matchId !== claimToken) return;
+
+  const preview = latestRoom.creditPreview || await getCreditPreviewForRoom(latestRoom);
   const historyRef = push(ref(db, "trainingHistory"));
-  const matchPayload = createHistoryRecordPayload(roomCode, room, preview);
+  const matchPayload = createHistoryRecordPayload(roomCode, latestRoom, preview);
   await set(historyRef, matchPayload);
+
   await update(ref(db, getRoomPath(roomCode)), { matchId: historyRef.key });
 
   const finishedAt = matchPayload.finishedAt;
-  const battle = room.battle ? normalizeBattle(room.battle) : null;
-  const participants = getParticipantsArray(room);
+  const battle = latestRoom.battle ? normalizeBattle(latestRoom.battle) : null;
+  const participants = getParticipantsArray(latestRoom);
 
   for (const participant of participants) {
     const charSnap = await get(ref(db, getCharacterPath(participant.uid, participant.characterId)));
     if (!charSnap.exists()) continue;
+
     const character = normalizeCharacter(charSnap.val());
     const enemyNames = participants
-      .filter(other => isEnemyParticipant(room.modeId, participant, other))
+      .filter(other => isEnemyParticipant(latestRoom.modeId, participant, other))
       .map(other => other.characterName)
       .join(", ");
+
     const next = applyBattleOutcomeToCharacter({
       character,
-      resultType: getParticipantResult(room, participant.uid),
+      resultType: getParticipantResult(latestRoom, participant.uid),
       opponentName: enemyNames,
       finishedAt,
       creditGranted: Boolean(preview.eligibleByParticipant?.[participant.uid]?.getsCredit),
       creditReason: preview.eligibleByParticipant?.[participant.uid]?.reason || preview.reason,
       analyticsDelta: battle?.fighters?.[participant.uid]?.analytics || createBattleAnalyticsBlock()
     });
+
     await set(ref(db, getCharacterPath(participant.uid, participant.characterId)), next);
   }
 
@@ -3170,7 +3774,8 @@ async function saveFinishedMatchIfNeeded(roomCode, room) {
       for (let j = i + 1; j < participants.length; j += 1) {
         const a = participants[i];
         const b = participants[j];
-        if (!isEnemyParticipant(room.modeId, a, b)) continue;
+        if (!isEnemyParticipant(latestRoom.modeId, a, b)) continue;
+
         const pairKey = getPairKey(a.uid, a.characterId, b.uid, b.characterId);
         await set(ref(db, getPairCooldownPath(pairKey)), {
           pairKey,
@@ -3200,111 +3805,194 @@ async function saveFinishedMatchIfNeeded(roomCode, room) {
   if (participants.some(item => item.uid === state.user?.uid)) {
     await loadOwnCharacters();
     renderProfile();
+    loadAndRenderHistory().catch(console.error);
   }
-}
-
-async function loadRecentFeedEntries() {
-  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
-  const snapshot = await get(feedQuery);
-  state.feedCache = snapshot.exists() ? Object.values(snapshot.val()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) : [];
-  return state.feedCache;
 }
 
 function renderFeedTicker() {
   if (!ui.shell.feedTicker) return;
   if (!state.feedCache.length) {
-    ui.shell.feedTicker.innerHTML = `<span class="feed-empty">✦ Лента пока пустует.</span>`;
-    return;
-  }
-  ui.shell.feedTicker.innerHTML = state.feedCache.slice(0, 10).map(item => `<span class="feed-item">✦ ${escapeHtml(item.text || "Событие")}</span>`).join("");
-}
-
-async function loadAllPublicCharacters() {
-  const snapshot = await get(ref(db, "users"));
-  if (!snapshot.exists()) {
-    state.publicCharactersCache = [];
-    return [];
-  }
-
-  const users = snapshot.val();
-  const result = [];
-  Object.entries(users).forEach(([uid, value]) => {
-    const profile = value?.profile || {};
-    const characters = value?.characters || {};
-    Object.entries(characters).forEach(([characterId, character]) => {
-      result.push({
-        uid,
-        characterId,
-        profileName: profile.displayName || "Игрок",
-        ...normalizeCharacter(character)
-      });
-    });
-  });
-  state.publicCharactersCache = result.sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
-  return state.publicCharactersCache;
-}
-
-function renderPublicProfilesList(filter = "") {
-  const queryText = String(filter || "").trim().toLowerCase();
-  const items = state.publicCharactersCache.filter(item => !queryText || item.name.toLowerCase().includes(queryText));
-  if (!items.length) {
-    html(ui.publicProfiles.list, `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">Ничего не найдено.</div>
-      </div>
-    `);
+    html(ui.shell.feedTicker, `<span class="feed-empty">Пока лента пуста.</span>`);
     return;
   }
 
-  html(ui.publicProfiles.list, items.map(item => `
-    <div class="public-character-card" data-public-uid="${escapeHtml(item.uid)}" data-public-character-id="${escapeHtml(item.characterId)}">
-      <div class="public-character-name">${escapeHtml(item.name)}</div>
-      <div class="public-character-meta">${escapeHtml(item.profileName)} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
-      <div class="public-character-owner">${escapeHtml(item.clan || "Без племени")}</div>
-    </div>
-  `).join(""));
+  html(
+    ui.shell.feedTicker,
+    state.feedCache
+      .slice()
+      .reverse()
+      .map(item => `<span class="feed-item">${escapeHtml(item.text || "Событие")}</span>`)
+      .join("")
+  );
+}
 
-  ui.publicProfiles.list.querySelectorAll(".public-character-card").forEach(node => {
-    node.addEventListener("click", () => {
-      renderPublicProfileDetails(node.dataset.publicUid, node.dataset.publicCharacterId);
-    });
+function watchFeed() {
+  if (typeof state.unsubscribeFeed === "function") {
+    state.unsubscribeFeed();
+    state.unsubscribeFeed = null;
+  }
+
+  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
+  state.unsubscribeFeed = onValue(feedQuery, snapshot => {
+    const raw = snapshot.exists() ? Object.values(snapshot.val()) : [];
+    state.feedCache = raw.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    renderFeedTicker();
   });
 }
 
-function renderPublicProfileDetails(uid, characterId) {
-  const item = state.publicCharactersCache.find(entry => entry.uid === uid && entry.characterId === characterId);
-  if (!item) {
-    html(ui.publicProfiles.details, `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">Выберите персонажа слева.</div>
-      </div>
-    `);
-    return;
-  }
+function renderCharacterCard(item) {
+  const character = normalizeCharacter(item);
+  const combat = getCombatViewTotals(character);
+  const pending = getPendingChoiceCount(character);
+  const isApprentice = character.trainingStatus === "apprentice";
+  const progress = character.training.progress;
+  const styleClass = isApprentice ? "character-card-apprentice" : "character-card-warrior";
 
-  const combat = getCombatViewTotals(item);
-  html(ui.publicProfiles.details, `
-    <div class="public-profile-card">
-      <div class="public-profile-name">${escapeHtml(item.name)}</div>
-      <div class="public-profile-owner">Владелец: ${escapeHtml(item.profileName)}</div>
-      <div class="public-profile-meta">${escapeHtml(item.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
-      <div class="public-profile-grid" style="margin-top:18px;">
-        <div class="public-profile-stat"><span>Шанс попадания</span><strong>${combat.accuracy}%</strong></div>
-        <div class="public-profile-stat"><span>Шанс уворота</span><strong>${combat.dodge}%</strong></div>
-        <div class="public-profile-stat"><span>Удар лапой</span><strong>${combat.clawPower}%</strong></div>
-        <div class="public-profile-stat"><span>Подсечка</span><strong>${combat.bitePower}%</strong></div>
-      </div>
-      <div class="public-profile-upgrades">Любимый приём: ${escapeHtml(getFavoriteMoveLabel(item))}. Точность: ${getAccuracyPercent(item)}%.</div>
+  const generalStats = `
+    <div class="fancy-stats-grid">
+      <div class="fancy-stat"><span>Все победы</span><strong>${character.profileStats.wins}</strong></div>
+      <div class="fancy-stat"><span>Все поражения</span><strong>${character.profileStats.losses}</strong></div>
+      <div class="fancy-stat"><span>Все ничьи</span><strong>${character.profileStats.draws}</strong></div>
     </div>
-  `);
+  `;
+
+  const creditStats = `
+    <div class="fancy-stats-grid">
+      <div class="fancy-stat"><span>Зачётные победы</span><strong>${progress.creditedWins}</strong></div>
+      <div class="fancy-stat"><span>Зачётные поражения</span><strong>${progress.creditedLosses}</strong></div>
+      <div class="fancy-stat"><span>Зачётные ничьи</span><strong>${progress.creditedDraws}</strong></div>
+    </div>
+  `;
+
+  return `
+    <div class="character-card ${styleClass}">
+      <div class="character-card-top">
+        <div>
+          <div class="character-card-name">${escapeHtml(character.name)}</div>
+          <div class="character-card-meta">${escapeHtml(character.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(character.trainingStatus))}</div>
+        </div>
+        <div class="character-card-badge">${pending > 0 ? `Улучшений: ${pending}` : "Без улучшений"}</div>
+      </div>
+
+      <div class="character-detail-block">
+        <div class="character-detail-title">Общая статистика</div>
+        ${generalStats}
+      </div>
+
+      <div class="character-detail-block" style="margin-top:12px;">
+        <div class="character-detail-title">Зачётная статистика</div>
+        ${creditStats}
+      </div>
+
+      <div class="character-upgrades-wrap">
+        <div class="character-upgrades-block">
+          <div class="character-detail-title">Текущий прогресс</div>
+          <div class="character-progress-line">Победы до улучшения: ${progress.winsTowardUpgrade}</div>
+          <div class="character-progress-line">Поражения до улучшения: ${progress.lossesTowardUpgrade}</div>
+          <div class="character-progress-line">Незавершённые: ${progress.unfinishedTrainings}</div>
+          <div class="character-progress-line">Без зачёта: ${progress.deniedTrainings}</div>
+        </div>
+
+        <div class="character-upgrades-block">
+          <div class="character-detail-title">Боевые параметры</div>
+          <div class="character-progress-line">Точность: ${combat.accuracy}%</div>
+          <div class="character-progress-line">Уворот: ${combat.dodge}%</div>
+          <div class="character-progress-line">Сила лапы: ${combat.clawPower}%</div>
+          <div class="character-progress-line">Сила подсечки: ${combat.bitePower}%</div>
+        </div>
+      </div>
+
+      <div class="character-upgrades-wrap">
+        <div class="character-upgrades-block">
+          <div class="character-detail-title">Излюбленный приём</div>
+          <div class="character-progress-line">${escapeHtml(getFavoriteMoveLabel(character))}</div>
+          <div class="character-progress-line">Точность попаданий: ${getAccuracyPercent(character)}%</div>
+        </div>
+
+        <div class="character-upgrades-block">
+          <div class="character-detail-title">Улучшения</div>
+          <div class="upgrade-chip-list">
+            ${getCurrentUpgradePool(character).length
+              ? getCurrentUpgradePool(character).map(item => `<span class="upgrade-chip">${escapeHtml(item.label)}</span>`).join("")
+              : `<span class="empty-inline">Пока пусто</span>`
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="character-card-actions">
+        <button type="button" class="secondary-btn character-edit-btn" data-char-id="${escapeHtml(item.id)}">Редактировать</button>
+        <button type="button" class="ghost-btn ghost-btn-danger character-delete-btn" data-char-id="${escapeHtml(item.id)}">Удалить</button>
+        <button type="button" class="primary-btn character-upgrade-btn" data-char-id="${escapeHtml(item.id)}" ${pending > 0 ? "" : "disabled"}>Выбрать улучшение</button>
+        ${isApprentice ? `<button type="button" class="ghost-btn character-promote-btn" data-char-id="${escapeHtml(item.id)}">Посвятить в воители</button>` : `<span></span>`}
+      </div>
+    </div>
+  `;
 }
 
-async function renderMyTrainingHistory() {
-  if (!state.user) return;
-  const snapshot = await get(ref(db, "trainingHistory"));
-  if (!snapshot.exists()) {
+function renderProfile() {
+  const profile = state.userProfile || createDefaultProfile("Зенит");
+  const activeCharacterId = profile.activeCharacterId || "";
+  const activeCharacter = getCharacterById(activeCharacterId);
+
+  text(ui.profile.name, profile.displayName || "Зенит");
+  text(ui.profile.statusText, profile.status || "✦ Наблюдает за бабочками");
+  text(ui.profile.portraitInitials, profile.portraitSymbol || getInitials(profile.displayName));
+  if (ui.profile.statusInput) ui.profile.statusInput.value = profile.status || "";
+  if (ui.profile.symbolSelect) ui.profile.symbolSelect.value = profile.portraitSymbol || "✦";
+
+  const characters = getSortedCharacters();
+  html(
+    ui.profile.activeCharacterSelect,
+    characters.length
+      ? characters.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === activeCharacterId ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")
+      : `<option value="">✦ Сначала добавь персонажа ✦</option>`
+  );
+
+  if (ui.profile.activeCharacterSelect) {
+    ui.profile.activeCharacterSelect.value = activeCharacterId || "";
+  }
+
+  if (ui.profile.ownerNoteInput) {
+    ui.profile.ownerNoteInput.value = activeCharacter?.ownerNote || "";
+  }
+
+  const queryText = (ui.profile.characterSearchInput?.value || "").trim().toLowerCase();
+  const filtered = characters.filter(item => item.name.toLowerCase().includes(queryText));
+
+  html(
+    ui.profile.charactersList,
+    filtered.length
+      ? filtered.map(renderCharacterCard).join("")
+      : `
+        <div class="empty-state-card">
+          <div class="empty-state-mark">✦</div>
+          <div class="empty-state-text">${characters.length ? "Ничего не найдено." : "Добавь первого персонажа."}</div>
+        </div>
+      `
+  );
+
+  ui.profile.charactersList.querySelectorAll(".character-edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => editCharacter(btn.dataset.charId).catch(error => notifyError(error.message)));
+  });
+  ui.profile.charactersList.querySelectorAll(".character-delete-btn").forEach(btn => {
+    btn.addEventListener("click", () => deleteCharacter(btn.dataset.charId).catch(error => notifyError(error.message)));
+  });
+  ui.profile.charactersList.querySelectorAll(".character-upgrade-btn").forEach(btn => {
+    btn.addEventListener("click", () => chooseUpgradeForCharacter(btn.dataset.charId).catch(error => notifyError(error.message)));
+  });
+  ui.profile.charactersList.querySelectorAll(".character-promote-btn").forEach(btn => {
+    btn.addEventListener("click", () => promoteApprenticeToWarrior(btn.dataset.charId).catch(error => notifyError(error.message)));
+  });
+
+  text(ui.room.playerNameMirror, profile.displayName || "—");
+  text(ui.room.activeCharacterMirror, activeCharacter?.name || "—");
+
+  refreshShellChrome();
+}
+
+async function loadAndRenderHistory() {
+  if (!state.user) {
     html(ui.history.list, `
       <div class="empty-state-card">
         <div class="empty-state-mark">✦</div>
@@ -3314,8 +4002,15 @@ async function renderMyTrainingHistory() {
     return;
   }
 
-  const all = Object.entries(snapshot.val()).map(([id, value]) => ({ id, ...value }));
-  const mine = all.filter(item => safeArray(item.participants).some(participant => participant.uid === state.user.uid)).sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+  const snapshot = await get(ref(db, "trainingHistory"));
+  const items = snapshot.exists()
+    ? Object.entries(snapshot.val()).map(([id, value]) => ({ id, ...value }))
+    : [];
+
+  const mine = items
+    .filter(item => safeArray(item.participants).some(participant => participant.uid === state.user.uid))
+    .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+
   if (!mine.length) {
     html(ui.history.list, `
       <div class="empty-state-card">
@@ -3326,636 +4021,660 @@ async function renderMyTrainingHistory() {
     return;
   }
 
-  html(ui.history.list, mine.map(item => `
-    <div class="history-item-card">
-      <div class="history-item-top">
-        <div class="card-title-row">
-          <span class="card-title-mark">✦</span>
-          <h3 class="card-title-text">${escapeHtml(getModeLabel(item.modeId))}</h3>
+  html(
+    ui.history.list,
+    mine.map(item => {
+      const myParticipants = safeArray(item.participants).filter(participant => participant.uid === state.user.uid);
+      const resultText = myParticipants.map(p => `${p.characterName}: ${p.result === "win" ? "победа" : p.result === "loss" ? "поражение" : p.result === "draw" ? "ничья" : "без итога"}`).join(" · ");
+      return `
+        <div class="history-item-card">
+          <div class="history-item-top">
+            <div class="card-title-row">
+              <span class="card-title-mark">✦</span>
+              <h3 class="card-title-text">${escapeHtml(getModeLabel(item.modeId))}</h3>
+            </div>
+            <div class="history-item-date">${escapeHtml(formatDate(item.finishedAt))}</div>
+          </div>
+          <div class="history-item-meta">Комната: ${escapeHtml(item.roomCode || "—")}</div>
+          <div class="history-item-result">${escapeHtml(resultText)}</div>
         </div>
-        <div class="history-item-date">${escapeHtml(formatDate(item.finishedAt))}</div>
-      </div>
-      <div class="history-item-meta">${escapeHtml(item.finishInfo?.message || "Тренировка завершена")}</div>
-      <div class="history-item-result">${safeArray(item.participants).map(participant => `${participant.characterName}: ${participant.result}${participant.getsCredit ? " · зачёт" : ""}`).join(" | ")}</div>
-    </div>
-  `).join(""));
+      `;
+    }).join("")
+  );
 }
 
-function renderCharacterSelect() {
-  const characters = getSortedCharacters();
-  const activeId = state.userProfile?.activeCharacterId || "";
-
-  if (!characters.length) {
-    ui.profile.activeCharacterSelect.innerHTML = `<option value="">✦ Сначала добавь персонажа ✦</option>`;
-    text(ui.room.activeCharacterMirror, "✦ персонаж не выбран");
+async function refreshPublicCharactersCache() {
+  const usersSnap = await get(ref(db, "users"));
+  if (!usersSnap.exists()) {
+    state.publicCharactersCache = [];
     return;
   }
 
-  ui.profile.activeCharacterSelect.innerHTML = characters
-    .map(character => `<option value="${escapeHtml(character.id)}" ${character.id === activeId ? "selected" : ""}>${escapeHtml(character.name)}</option>`)
-    .join("");
+  const rawUsers = usersSnap.val();
+  const cache = [];
 
-  const selected = getCharacterById(ui.profile.activeCharacterSelect.value);
-  text(ui.room.activeCharacterMirror, selected ? `✦ ${selected.name}` : "✦ персонаж не выбран");
+  Object.entries(rawUsers).forEach(([uid, userBlock]) => {
+    const profile = userBlock.profile || {};
+    const characters = userBlock.characters || {};
+    Object.entries(characters).forEach(([characterId, charValue]) => {
+      const character = normalizeCharacter(charValue);
+      cache.push({
+        uid,
+        characterId,
+        ownerName: profile.displayName || "Игрок",
+        ownerStatus: profile.status || "",
+        ...character
+      });
+    });
+  });
+
+  state.publicCharactersCache = cache.sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
-function buildUpgradeChips(upgrades) {
-  const list = safeArray(upgrades);
-  if (!list.length) return `<div class="empty-inline">✦ Пока нет улучшений</div>`;
-  return list.map(item => `<span class="upgrade-chip">${escapeHtml(item.label)}</span>`).join("");
-}
+function renderPublicProfilesList() {
+  const queryText = (ui.publicProfiles.searchInput?.value || "").trim().toLowerCase();
+  const filtered = state.publicCharactersCache.filter(item => item.name.toLowerCase().includes(queryText));
 
-function buildCharacterCard(characterId, character) {
-  const combat = getCombatViewTotals(character);
-  const progress = character.training.progress;
-  const thresholds = getThresholdsForStatus(character.trainingStatus);
-  const pending = getPendingChoiceCount(character);
-  const currentPool = getCurrentUpgradePool(character);
-
-  return `
-    <div class="character-card ${character.trainingStatus === "apprentice" ? "character-card-apprentice" : "character-card-warrior"}">
-      <div class="character-card-top">
-        <div>
-          <div class="character-card-name">${escapeHtml(character.name)}</div>
-          <div class="character-card-meta">${escapeHtml(character.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(character.trainingStatus))}</div>
+  html(
+    ui.publicProfiles.list,
+    filtered.length
+      ? filtered.map(item => `
+        <div class="public-character-card" data-public-key="${escapeHtml(`${item.uid}__${item.characterId}`)}">
+          <div class="public-character-name">${escapeHtml(item.name)}</div>
+          <div class="public-character-meta">${escapeHtml(item.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
+          <div class="public-character-owner">${escapeHtml(item.ownerName)}</div>
         </div>
-        <div class="character-card-badge">${characterId === state.userProfile?.activeCharacterId ? "Активный" : "Персонаж"}</div>
-      </div>
-
-      <div class="fancy-stats-grid">
-        <div class="fancy-stat"><span>Попадание</span><strong>${combat.accuracy}%</strong></div>
-        <div class="fancy-stat"><span>Уворот</span><strong>${combat.dodge}%</strong></div>
-        <div class="fancy-stat"><span>Лапа</span><strong>${combat.clawPower}%</strong></div>
-        <div class="fancy-stat"><span>Подсечка</span><strong>${combat.bitePower}%</strong></div>
-      </div>
-
-      <div class="character-progress-line">
-        Победы до улучшения: <strong>${progress.winsTowardUpgrade} / ${thresholds.wins}</strong> ·
-        Поражения до улучшения: <strong>${progress.lossesTowardUpgrade} / ${thresholds.losses}</strong> ·
-        Доступно выбрать: <strong>${pending}</strong>
-      </div>
-
-      <div class="character-upgrades-wrap">
-        <div class="character-upgrades-block">
-          <div class="character-detail-title">Текущие улучшения</div>
-          <div class="upgrade-chip-list">${buildUpgradeChips(currentPool)}</div>
+      `).join("")
+      : `
+        <div class="empty-state-card">
+          <div class="empty-state-mark">✦</div>
+          <div class="empty-state-text">Ничего не найдено.</div>
         </div>
-        <div class="character-upgrades-block">
-          <div class="character-detail-title">Ученическая ветка</div>
-          <div class="upgrade-chip-list">${buildUpgradeChips(character.training.apprenticeUpgrades)}</div>
-        </div>
-      </div>
-
-      <div class="character-owner-note-box">Заметка: ${escapeHtml(character.ownerNote || "—")}</div>
-
-      <div class="character-card-actions">
-        <button type="button" class="ghost-btn set-active-character-btn" data-character-action="active" data-character-id="${escapeHtml(characterId)}">Сделать активным</button>
-        <button type="button" class="ghost-btn edit-character-btn" data-character-action="edit" data-character-id="${escapeHtml(characterId)}">Редактировать</button>
-        <button type="button" class="ghost-btn delete-character-btn" data-character-action="delete" data-character-id="${escapeHtml(characterId)}">Удалить</button>
-        <button type="button" class="primary-btn choose-upgrade-btn" data-character-action="upgrade" data-character-id="${escapeHtml(characterId)}" ${pending <= 0 ? "disabled" : ""}>Выбрать улучшение</button>
-        <button type="button" class="secondary-btn promote-character-btn" data-character-action="promote" data-character-id="${escapeHtml(characterId)}" ${character.trainingStatus !== "apprentice" ? "disabled" : ""}>Посвятить в воители</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderProfile() {
-  if (!state.user || !state.userProfile) return;
-
-  renderUserBadge();
-
-  text(ui.profile.name, state.userProfile.displayName || "Зенит");
-  text(ui.profile.statusText, state.userProfile.status || "✦ Наблюдает за бабочками");
-
-  if (ui.profile.statusInput) {
-    ui.profile.statusInput.value = state.userProfile.status || "";
-  }
-
-  if (ui.profile.symbolSelect) {
-    ui.profile.symbolSelect.value = state.userProfile.portraitSymbol || "✦";
-  }
-
-  text(
-    ui.profile.portraitInitials,
-    state.userProfile.portraitSymbol || getInitials(state.userProfile.displayName || "Зенит")
+      `
   );
 
-  if (ui.profile.ownerNoteInput) {
-    const activeCharacter = getCharacterById(getSelectedCharacterId());
-    ui.profile.ownerNoteInput.value = activeCharacter?.ownerNote || "";
-  }
+  ui.publicProfiles.list.querySelectorAll(".public-character-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const [uid, characterId] = card.dataset.publicKey.split("__");
+      const item = state.publicCharactersCache.find(entry => entry.uid === uid && entry.characterId === characterId);
+      if (!item) return;
 
-  text(ui.room.playerNameMirror, state.userProfile.displayName || "—");
-  renderCharacterSelect();
+      html(ui.publicProfiles.details, `
+        <div class="public-profile-card">
+          <div class="public-profile-name">${escapeHtml(item.name)}</div>
+          <div class="public-profile-owner">Игрок: ${escapeHtml(item.ownerName)}</div>
+          <div class="public-profile-meta">${escapeHtml(item.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
 
-  const searchText = (ui.profile.characterSearchInput?.value || "").trim().toLowerCase();
-  const characters = getSortedCharacters().filter(item => !searchText || item.name.toLowerCase().includes(searchText));
+          <div class="public-profile-grid" style="margin-top:16px;">
+            <div class="public-profile-stat"><span>Все победы</span><strong>${item.profileStats.wins}</strong></div>
+            <div class="public-profile-stat"><span>Все поражения</span><strong>${item.profileStats.losses}</strong></div>
+            <div class="public-profile-stat"><span>Все ничьи</span><strong>${item.profileStats.draws}</strong></div>
+            <div class="public-profile-stat"><span>Зачётные победы</span><strong>${item.training.progress.creditedWins}</strong></div>
+            <div class="public-profile-stat"><span>Зачётные поражения</span><strong>${item.training.progress.creditedLosses}</strong></div>
+            <div class="public-profile-stat"><span>Зачётные ничьи</span><strong>${item.training.progress.creditedDraws}</strong></div>
+          </div>
 
-  if (!characters.length) {
-    html(ui.profile.charactersList, `
-      <div class="empty-state-card">
-        <div class="empty-state-mark">✦</div>
-        <div class="empty-state-text">Добавь первого персонажа.</div>
-      </div>
-    `);
-    return;
-  }
-
-  html(ui.profile.charactersList, characters.map(item => buildCharacterCard(item.id, item)).join(""));
-
-  ui.profile.charactersList.querySelectorAll("[data-character-action]").forEach(node => {
-    node.addEventListener("click", event => {
-      const characterId = event.currentTarget.dataset.characterId;
-      const action = event.currentTarget.dataset.characterAction;
-
-      if (action === "active") {
-        saveActiveCharacter(characterId).catch(error => notifyError(error.message));
-      }
-      if (action === "edit") {
-        editCharacter(characterId).catch(error => notifyError(error.message));
-      }
-      if (action === "delete") {
-        deleteCharacter(characterId).catch(error => notifyError(error.message));
-      }
-      if (action === "upgrade") {
-        chooseUpgradeForCharacter(characterId).catch(error => notifyError(error.message));
-      }
-      if (action === "promote") {
-        promoteApprenticeToWarrior(characterId).catch(error => notifyError(error.message));
-      }
+          <div class="public-profile-upgrades">
+            Улучшения: ${
+              getCurrentUpgradePool(item).length
+                ? getCurrentUpgradePool(item).map(up => up.label).join(", ")
+                : "пока нет"
+            }
+          </div>
+        </div>
+      `);
     });
   });
 }
 
-function renderUserBadge() {
-  const name = state.userProfile?.displayName || state.user?.email || "Гость";
-  text(ui.shell.currentUserBadge, `✦ ${name} ✦`);
-}
+async function refreshAdminCaches() {
+  const [usersSnap, roomsSnap, matchesSnap] = await Promise.all([
+    get(ref(db, "users")),
+    get(ref(db, "rooms")),
+    get(ref(db, "trainingHistory"))
+  ]);
 
-function renderThemeSelector() {
-  if (!ui.shell.themeSelect) return;
-  ui.shell.themeSelect.innerHTML = Object.values(THEMES)
-    .map(theme => `<option value="${theme.id}">${theme.label}</option>`)
-    .join("");
-  ui.shell.themeSelect.value = state.activeTheme;
-}
-
-function renderCardStyleSelector() {
-  if (!ui.shell.cardStyleSelect) return;
-  ui.shell.cardStyleSelect.innerHTML = Object.values(CARD_STYLES)
-    .map(style => `<option value="${style.id}">${style.label}</option>`)
-    .join("");
-  ui.shell.cardStyleSelect.value = state.activeCardStyle;
-}
-
-function cleanupAdminWatchers() {
-  if (typeof state.unsubscribeUsers === "function") state.unsubscribeUsers();
-  if (typeof state.unsubscribeRooms === "function") state.unsubscribeRooms();
-  if (typeof state.unsubscribeMatches === "function") state.unsubscribeMatches();
-
-  state.unsubscribeUsers = null;
-  state.unsubscribeRooms = null;
-  state.unsubscribeMatches = null;
-}
-
-function watchFeed() {
-  if (state.unsubscribeFeed) return;
-  const feedQuery = query(ref(db, getFeedPath()), orderByChild("createdAt"), limitToLast(FEED_LIMIT));
-  state.unsubscribeFeed = onValue(feedQuery, snapshot => {
-    state.feedCache = snapshot.exists()
-      ? Object.values(snapshot.val()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      : [];
-    renderFeedTicker();
-  });
-}
-
-function watchAdminData() {
-  if (!state.isAdmin) return;
-
-  if (!state.unsubscribeUsers) {
-    state.unsubscribeUsers = onValue(ref(db, "users"), snapshot => {
-      state.adminUsersCache = snapshot.exists() ? snapshot.val() : {};
-      renderAdmin();
-    });
-  }
-
-  if (!state.unsubscribeRooms) {
-    state.unsubscribeRooms = onValue(ref(db, "rooms"), snapshot => {
-      state.adminRoomsCache = snapshot.exists() ? snapshot.val() : {};
-      renderAdmin();
-    });
-  }
-
-  if (!state.unsubscribeMatches) {
-    state.unsubscribeMatches = onValue(ref(db, "trainingHistory"), snapshot => {
-      state.adminMatchesCache = snapshot.exists() ? snapshot.val() : {};
-      renderAdmin();
-    });
-  }
+  state.adminUsersCache = usersSnap.exists() ? usersSnap.val() : {};
+  state.adminRoomsCache = roomsSnap.exists() ? roomsSnap.val() : {};
+  state.adminMatchesCache = matchesSnap.exists() ? matchesSnap.val() : {};
 }
 
 function renderAdmin() {
   if (!state.isAdmin) return;
 
-  const users = Object.entries(state.adminUsersCache || {});
-  const rooms = Object.entries(state.adminRoomsCache || {});
-  const matches = Object.entries(state.adminMatchesCache || {});
+  const userEntries = Object.entries(state.adminUsersCache || {});
+  const roomEntries = Object.entries(state.adminRoomsCache || {});
+  const matchEntries = Object.entries(state.adminMatchesCache || {});
 
   html(ui.admin.summary, `
     <div class="admin-summary-grid">
-      <div class="admin-summary-card"><span>Игроков</span><strong>${users.length}</strong></div>
-      <div class="admin-summary-card"><span>Комнат</span><strong>${rooms.length}</strong></div>
-      <div class="admin-summary-card"><span>Историй</span><strong>${matches.length}</strong></div>
+      <div class="admin-summary-card"><span>Игроков</span><strong>${userEntries.length}</strong></div>
+      <div class="admin-summary-card"><span>Комнат</span><strong>${roomEntries.length}</strong></div>
+      <div class="admin-summary-card"><span>Тренировок</span><strong>${matchEntries.length}</strong></div>
     </div>
   `);
 
-  html(ui.admin.playersList, users.map(([uid, value]) => `
-    <div class="admin-user-card">
-      <div class="admin-user-name">${escapeHtml(value?.profile?.displayName || uid)}</div>
-      <div class="admin-user-meta">${escapeHtml(uid)}</div>
-    </div>
-  `).join("") || `<div class="empty-state-card"><div class="empty-state-text">Игроков пока нет.</div></div>`);
+  html(
+    ui.admin.playersList,
+    userEntries.length
+      ? userEntries.map(([uid, block]) => `
+        <div class="admin-user-card">
+          <div class="admin-user-name">${escapeHtml(block.profile?.displayName || "Игрок")}</div>
+          <div class="admin-user-meta">${escapeHtml(uid)}</div>
+        </div>
+      `).join("")
+      : `<div class="empty-inline">Пока пусто.</div>`
+  );
 
-  const searchText = (ui.admin.searchInput?.value || "").trim().toLowerCase();
+  const characterSearch = (ui.admin.searchInput?.value || "").trim().toLowerCase();
   const allCharacters = [];
-
-  users.forEach(([uid, value]) => {
-    Object.entries(value?.characters || {}).forEach(([characterId, character]) => {
-      const normalized = normalizeCharacter(character);
+  userEntries.forEach(([uid, block]) => {
+    Object.entries(block.characters || {}).forEach(([characterId, charValue]) => {
+      const character = normalizeCharacter(charValue);
       allCharacters.push({
         uid,
         characterId,
-        ...normalized,
-        owner: value?.profile?.displayName || uid
+        ownerName: block.profile?.displayName || "Игрок",
+        ...character
       });
     });
   });
 
-  const filteredCharacters = allCharacters.filter(item => !searchText || item.name.toLowerCase().includes(searchText));
+  const filteredCharacters = allCharacters.filter(item => item.name.toLowerCase().includes(characterSearch));
 
-  html(ui.admin.charactersList, filteredCharacters.map(item => `
-    <div class="admin-character-card">
-      <div class="admin-character-name">${escapeHtml(item.name)}</div>
-      <div class="admin-character-meta">${escapeHtml(item.owner)} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
-    </div>
-  `).join("") || `<div class="empty-state-card"><div class="empty-state-text">Персонажи не найдены.</div></div>`);
+  html(
+    ui.admin.charactersList,
+    filteredCharacters.length
+      ? filteredCharacters.map(item => `
+        <div class="admin-character-card">
+          <div class="admin-character-name">${escapeHtml(item.name)}</div>
+          <div class="admin-character-meta">${escapeHtml(item.ownerName)} · ${escapeHtml(item.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(item.trainingStatus))}</div>
+        </div>
+      `).join("")
+      : `<div class="empty-inline">Ничего не найдено.</div>`
+  );
 
-  html(ui.admin.roomsList, rooms.map(([roomCode, roomValue]) => {
-    const room = normalizeRoom(roomValue);
-    return `
-      <div class="admin-room-card">
-        <div class="admin-room-name">${escapeHtml(roomCode)}</div>
-        <div class="admin-room-meta">${escapeHtml(getRoomStatusLabel(room.status))} · ${escapeHtml(getModeLabel(room.modeId))}</div>
-      </div>
-    `;
-  }).join("") || `<div class="empty-state-card"><div class="empty-state-text">Комнат пока нет.</div></div>`);
+  html(
+    ui.admin.roomsList,
+    roomEntries.length
+      ? roomEntries.map(([code, value]) => {
+          const room = normalizeRoom(value);
+          return `
+            <div class="admin-room-card">
+              <div class="admin-room-name">${escapeHtml(code)}</div>
+              <div class="admin-room-meta">${escapeHtml(getRoomStatusLabel(room.status))} · ${escapeHtml(getModeLabel(room.modeId))}</div>
+            </div>
+          `;
+        }).join("")
+      : `<div class="empty-inline">Активных комнат нет.</div>`
+  );
 
-  html(ui.admin.matchesList, matches.map(([id, value]) => `
-    <div class="admin-match-card">
-      <div class="admin-match-title">${escapeHtml(getModeLabel(value.modeId))}</div>
-      <div class="admin-match-meta">${escapeHtml(formatDate(value.finishedAt))}</div>
-      <div class="admin-match-result">${escapeHtml(value.finishInfo?.message || "Тренировка завершена")}</div>
-    </div>
-  `).join("") || `<div class="empty-state-card"><div class="empty-state-text">История пока пуста.</div></div>`);
+  const sortedMatches = matchEntries
+    .map(([id, value]) => ({ id, ...value }))
+    .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
 
-  html(ui.admin.playerHistoryList, `
-    <div class="empty-state-card">
-      <div class="empty-state-text">Выбери игрока в верхнем столбце, если захочешь расширить админку дальше.</div>
-    </div>
-  `);
+  html(
+    ui.admin.matchesList,
+    sortedMatches.length
+      ? sortedMatches.map(item => `
+        <div class="admin-match-card">
+          <div class="admin-match-title">${escapeHtml(getModeLabel(item.modeId))}</div>
+          <div class="admin-match-meta">${escapeHtml(formatDate(item.finishedAt))}</div>
+          <div class="admin-match-result">${escapeHtml(item.finishInfo?.message || "Тренировка завершена.")}</div>
+        </div>
+      `).join("")
+      : `<div class="empty-inline">История пуста.</div>`
+  );
+
+  html(ui.admin.playerHistoryList, `<div class="empty-inline">Выберите игрока в будущем.</div>`);
 }
 
-function renderAuthState() {
-  const signedIn = Boolean(state.user);
+function setScreen(screenName) {
+  state.currentScreen = screenName;
 
-  if (signedIn) {
-    hide(ui.screens.auth);
-    show(ui.screens.profile);
-    hide(ui.screens.room);
-    hide(ui.screens.admin);
-    hide(ui.screens.history);
-    hide(ui.screens.publicProfiles);
-    hide(ui.battle.screen);
+  Object.entries(ui.screens).forEach(([key, node]) => {
+    if (!node) return;
+    if (key === screenName) show(node);
+    else hide(node);
+  });
 
-    if (state.isAdmin) show(ui.shell.openAdminBtn);
-    else hide(ui.shell.openAdminBtn);
-
-    show(ui.shell.openHistoryBtn);
-    show(ui.shell.openPublicProfilesBtn);
-  } else {
-    show(ui.screens.auth);
-    hide(ui.screens.profile);
-    hide(ui.screens.room);
-    hide(ui.screens.admin);
-    hide(ui.screens.history);
-    hide(ui.screens.publicProfiles);
-    hide(ui.battle.screen);
-
-    hide(ui.shell.openAdminBtn);
-    hide(ui.shell.openHistoryBtn);
-    hide(ui.shell.openPublicProfilesBtn);
+  if (screenName === "history") {
+    loadAndRenderHistory().catch(error => notifyError(error.message));
   }
 
-  if (state.isBlocked) notifyError("Ваш аккаунт заблокирован администратором.");
-}
-
-function setScreen(screenKey) {
-  hide(ui.screens.auth);
-  hide(ui.screens.profile);
-  hide(ui.screens.room);
-  hide(ui.screens.admin);
-  hide(ui.screens.history);
-  hide(ui.screens.publicProfiles);
-
-  if (!state.user && screenKey !== "auth") {
-    show(ui.screens.auth);
-    state.currentScreen = "auth";
-    return;
-  }
-
-  if (screenKey === "auth") show(ui.screens.auth);
-  if (screenKey === "profile") show(ui.screens.profile);
-  if (screenKey === "room") show(ui.screens.room);
-  if (screenKey === "admin" && state.isAdmin) show(ui.screens.admin);
-  if (screenKey === "history") show(ui.screens.history);
-  if (screenKey === "publicProfiles") show(ui.screens.publicProfiles);
-
-  state.currentScreen = screenKey;
-}
-
-function bindAuthEvents() {
-  ui.auth.registerBtn?.addEventListener("click", () => {
-    handleRegister().catch(error => notifyError(error.message));
-  });
-
-  ui.auth.loginBtn?.addEventListener("click", () => {
-    handleLogin().catch(error => notifyError(error.message));
-  });
-
-  ui.auth.logoutBtn?.addEventListener("click", () => {
-    handleLogout().catch(error => notifyError(error.message));
-  });
-}
-
-function bindShellEvents() {
-  ui.shell.mainLogoutBtn?.addEventListener("click", () => {
-    handleLogout().catch(error => notifyError(error.message));
-  });
-
-  ui.shell.openProfileBtn?.addEventListener("click", () => {
-    setScreen("profile");
-    renderProfile();
-  });
-
-  ui.shell.openRoomBtn?.addEventListener("click", () => {
-    setScreen("room");
-    if (!state.currentRoomCode) renderRoomIdleState();
-  });
-
-  ui.shell.openHistoryBtn?.addEventListener("click", () => {
-    setScreen("history");
-    renderMyTrainingHistory().catch(error => notifyError(error.message));
-  });
-
-  ui.shell.openPublicProfilesBtn?.addEventListener("click", () => {
-    setScreen("publicProfiles");
-    loadAllPublicCharacters()
-      .then(() => {
-        renderPublicProfilesList();
-        renderPublicProfileDetails("", "");
-      })
+  if (screenName === "publicProfiles") {
+    refreshPublicCharactersCache()
+      .then(renderPublicProfilesList)
       .catch(error => notifyError(error.message));
-  });
+  }
 
-  ui.shell.openAdminBtn?.addEventListener("click", () => {
-    if (!state.isAdmin) return;
-    watchAdminData();
-    setScreen("admin");
-    renderAdmin();
-  });
+  if (screenName === "admin" && state.isAdmin) {
+    refreshAdminCaches()
+      .then(renderAdmin)
+      .catch(error => notifyError(error.message));
+  }
+}
 
-  ui.shell.themeSelect?.addEventListener("change", async event => {
-    applyTheme(event.target.value);
-    if (state.user) {
-      await update(ref(db, getProfilePath(state.user.uid)), {
-        themeId: state.activeTheme,
-        updatedAt: now()
-      });
-      state.userProfile = await loadUserProfile(state.user.uid);
-    }
-  });
+function refreshShellChrome() {
+  text(ui.shell.currentUserBadge, `✦ ${state.userProfile?.displayName || "Гость"} ✦`);
 
-  ui.shell.cardStyleSelect?.addEventListener("change", async event => {
-    applyCardStyle(event.target.value);
-    if (state.user) {
-      await update(ref(db, getProfilePath(state.user.uid)), {
-        cardStyleId: state.activeCardStyle,
-        updatedAt: now()
-      });
-      state.userProfile = await loadUserProfile(state.user.uid);
-    }
+  ui.shell.openHistoryBtn?.classList.toggle("hidden", !state.user);
+  ui.shell.openPublicProfilesBtn?.classList.toggle("hidden", !state.user);
+  ui.shell.openAdminBtn?.classList.toggle("hidden", !state.isAdmin);
+
+  if (ui.shell.themeSelect) ui.shell.themeSelect.value = state.activeTheme;
+  if (ui.shell.cardStyleSelect) ui.shell.cardStyleSelect.value = state.activeCardStyle;
+}
+
+async function saveUserVisualPrefs() {
+  if (!state.user) return;
+  await update(ref(db, getProfilePath(state.user.uid)), {
+    themeId: state.activeTheme,
+    cardStyleId: state.activeCardStyle,
+    updatedAt: now()
   });
 }
 
-function bindProfileEvents() {
-  ui.profile.saveProfileBtn?.addEventListener("click", () => {
-    saveProfileStatus().catch(error => notifyError(error.message));
-  });
+function injectSupplementalStyles() {
+  if (document.getElementById("zenithSupplementalStyles")) return;
 
-  ui.profile.savePortraitSymbolBtn?.addEventListener("click", () => {
-    savePortraitSymbol().catch(error => notifyError(error.message));
-  });
+  const style = document.createElement("style");
+  style.id = "zenithSupplementalStyles";
+  style.textContent = `
+    .room-vs-shell {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .room-vs-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+    .room-vs-title {
+      text-align: center;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      color: var(--accent-3);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.04);
+    }
+    .room-vs-mark {
+      align-self: center;
+      justify-self: center;
+      font-weight: 1000;
+      font-size: 28px;
+      color: var(--gold);
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: rgba(255,255,255,0.04);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.2);
+    }
+    .room-vs-list,
+    .room-ffa-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .room-ffa-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+    }
+    .room-sigil-card {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255,255,255,0.07);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)), var(--panel-3);
+      box-shadow: var(--shadow);
+    }
+    .room-sigil-card-self {
+      border-color: var(--border-strong);
+      box-shadow: 0 16px 34px rgba(0,0,0,0.26);
+    }
+    .room-sigil-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .room-sigil-name {
+      font-size: 22px;
+      font-weight: 1000;
+      line-height: 1.02;
+    }
+    .room-sigil-meta {
+      margin-top: 6px;
+      color: var(--muted);
+    }
+    .room-sigil-ready {
+      min-height: 30px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+    .room-sigil-ready-yes {
+      color: var(--accent-3);
+      border-color: var(--border-strong);
+    }
+    .room-sigil-ready-no {
+      color: var(--muted);
+    }
+    .room-sigil-side {
+      margin-top: 12px;
+    }
+    .room-sigil-side-value {
+      color: var(--accent-3);
+      font-weight: 800;
+    }
+    .waiting-seal-card {
+      padding: 18px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255,255,255,0.06);
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)), var(--panel-3);
+      box-shadow: var(--shadow);
+    }
+    .waiting-seal-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .waiting-seal-title {
+      font-size: 26px;
+      font-weight: 1000;
+      line-height: 1.04;
+    }
+    .waiting-seal-badge {
+      min-height: 34px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .waiting-seal-badge-good {
+      color: var(--accent-3);
+      border-color: var(--border-strong);
+    }
+    .waiting-seal-badge-soft {
+      color: var(--muted);
+    }
+    .waiting-seal-text {
+      margin-top: 8px;
+      color: var(--muted);
+    }
+    .waiting-side-summary {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .waiting-side-chip {
+      min-height: 34px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--accent-3);
+      font-weight: 800;
+    }
+    .waiting-side-chip-vs {
+      color: var(--gold);
+    }
+    .result-victory-card {
+      position: relative;
+      overflow: hidden;
+      padding: 20px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-strong);
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), var(--panel-3);
+      box-shadow: var(--shadow-strong);
+      text-align: center;
+    }
+    .result-victory-crown {
+      font-size: 28px;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+    .result-victory-title {
+      font-size: 28px;
+      font-weight: 1000;
+      line-height: 1.04;
+    }
+    .result-victory-text {
+      margin-top: 10px;
+      color: var(--muted);
+    }
+    .result-victory-bars {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+      text-align: left;
+    }
+    .battle-bar-card-hidden .battle-bar-track-hidden {
+      background: rgba(255,255,255,0.04);
+    }
+    .battle-bar-fill-hidden {
+      opacity: 0.18;
+      filter: grayscale(1);
+    }
+    .battle-effects-grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+      gap: 10px;
+    }
+    .battle-effect-chip {
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.035);
+    }
+    .battle-effect-chip-label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    .battle-effect-chip strong {
+      font-size: 17px;
+      font-weight: 900;
+      color: var(--accent-3);
+    }
+    .battle-turn-card {
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
+    }
+    .battle-turn-card-good {
+      border-color: color-mix(in srgb, var(--accent-2) 32%, transparent);
+    }
+    .battle-turn-card-danger {
+      border-color: rgba(255, 124, 148, 0.35);
+    }
+    .battle-turn-card-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .battle-turn-card-round {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .battle-turn-card-actor {
+      color: var(--accent-3);
+      font-weight: 900;
+    }
+    .battle-turn-card-body {
+      display: grid;
+      gap: 8px;
+    }
+    .battle-turn-card-line {
+      color: var(--soft);
+      line-height: 1.5;
+    }
+    .battle-round-stack {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+    }
+    .battle-finish-note {
+      color: var(--accent-3);
+      font-weight: 800;
+      line-height: 1.5;
+    }
+    @media (max-width: 980px) {
+      .room-vs-shell {
+        grid-template-columns: 1fr;
+      }
+      .room-vs-mark {
+        order: 2;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
-  ui.profile.addCharacterBtn?.addEventListener("click", () => {
-    addCharacter().catch(error => notifyError(error.message));
-  });
+function bindStaticEvents() {
+  ui.auth.registerBtn?.addEventListener("click", () => handleRegister().catch(error => notifyError(error.message)));
+  ui.auth.loginBtn?.addEventListener("click", () => handleLogin().catch(error => notifyError(error.message)));
+  ui.auth.logoutBtn?.addEventListener("click", () => handleLogout().catch(error => notifyError(error.message)));
+  ui.shell.mainLogoutBtn?.addEventListener("click", () => handleLogout().catch(error => notifyError(error.message)));
 
+  ui.profile.saveProfileBtn?.addEventListener("click", () => saveProfileStatus().catch(error => notifyError(error.message)));
+  ui.profile.savePortraitSymbolBtn?.addEventListener("click", () => savePortraitSymbol().catch(error => notifyError(error.message)));
+  ui.profile.addCharacterBtn?.addEventListener("click", () => addCharacter().catch(error => notifyError(error.message)));
+  ui.profile.saveOwnerNoteBtn?.addEventListener("click", () => {
+    const characterId = getSelectedCharacterId();
+    saveOwnerNote(characterId, ui.profile.ownerNoteInput?.value || "").catch(error => notifyError(error.message));
+  });
   ui.profile.activeCharacterSelect?.addEventListener("change", event => {
     saveActiveCharacter(event.target.value).catch(error => notifyError(error.message));
   });
+  ui.profile.characterSearchInput?.addEventListener("input", renderProfile);
 
-  ui.profile.saveOwnerNoteBtn?.addEventListener("click", () => {
-    saveOwnerNote(getSelectedCharacterId(), ui.profile.ownerNoteInput?.value || "")
-      .catch(error => notifyError(error.message));
-  });
-
-  ui.profile.characterSearchInput?.addEventListener("input", () => {
-    renderProfile();
-  });
-}
-
-function bindRoomEvents() {
-  ui.room.createRoomBtn?.addEventListener("click", () => {
-    createRoom().catch(error => notifyError(error.message));
-  });
-
-  ui.room.joinRoomBtn?.addEventListener("click", () => {
-    joinRoom().catch(error => notifyError(error.message));
-  });
-
-  ui.room.leaveRoomBtn?.addEventListener("click", () => {
-    leaveRoom().catch(error => notifyError(error.message));
-  });
-
+  ui.room.createRoomBtn?.addEventListener("click", () => createRoom().catch(error => notifyError(error.message)));
+  ui.room.joinRoomBtn?.addEventListener("click", () => joinRoom().catch(error => notifyError(error.message)));
+  ui.room.leaveRoomBtn?.addEventListener("click", () => leaveRoom().catch(error => notifyError(error.message)));
+  ui.room.readyToggleBtn?.addEventListener("click", () => toggleReady().catch(error => notifyError(error.message)));
+  ui.room.startBattleBtn?.addEventListener("click", () => startBattle().catch(error => notifyError(error.message)));
   ui.room.copyRoomCodeBtn?.addEventListener("click", async () => {
-    const roomCode = state.currentRoomCode || (ui.room.roomCodeInput?.value || "").trim().toUpperCase();
-    if (!roomCode) {
-      notifyError("Сначала создай комнату или войди в неё.");
+    if (!state.currentRoomCode) {
+      notifyError("Сначала открой комнату.");
       return;
     }
-    await navigator.clipboard.writeText(roomCode);
-    notify(`Код комнаты ${roomCode} скопирован.`);
-  });
-
-  ui.room.readyToggleBtn?.addEventListener("click", () => {
-    toggleReady().catch(error => notifyError(error.message));
-  });
-
-  ui.room.startBattleBtn?.addEventListener("click", () => {
-    startBattle().catch(error => notifyError(error.message));
+    await navigator.clipboard.writeText(state.currentRoomCode);
+    notify("Код комнаты скопирован.");
   });
 
   byId("groupModeSelect")?.addEventListener("change", event => {
     setRoomMode(event.target.value).catch(error => notifyError(error.message));
   });
-}
 
-function bindBattleEvents() {
-  ui.battle.attackActionBtn?.addEventListener("click", () => {
-    startAttackPlanning();
-  });
-
+  ui.battle.attackActionBtn?.addEventListener("click", startAttackPlanning);
   ui.battle.defendActionBtn?.addEventListener("click", () => {
     submitBattleAction({ kind: "defend" }).catch(error => notifyError(error.message));
   });
-
   ui.battle.escapeActionBtn?.addEventListener("click", () => {
     submitBattleAction({ kind: "escape" }).catch(error => notifyError(error.message));
-  });
-
-  ui.battle.backToActionsBtn?.addEventListener("click", () => {
-    resetPlanningState();
-  });
-
-  ui.battle.backToAttackMenuBtn?.addEventListener("click", () => {
-    if (!state.planningAttack) return;
-    show(ui.battle.attackMenu);
-    hide(ui.battle.targetMenu);
-    state.planningAttack.pendingType = "";
-    updatePlanningBadge();
   });
 
   ui.battle.sandAttackBtn?.addEventListener("click", () => {
     commitPlannedAttackStep({ type: "sand" });
   });
-
-  ui.battle.tripAttackBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "trip" });
-  });
-
   ui.battle.pawAttackBtn?.addEventListener("click", () => {
-    if (!state.planningAttack) return;
     state.planningAttack.pendingType = "paw";
     hide(ui.battle.attackMenu);
     show(ui.battle.targetMenu);
-    updatePlanningBadge();
+  });
+  ui.battle.tripAttackBtn?.addEventListener("click", () => {
+    commitPlannedAttackStep({ type: "trip" });
+  });
+  ui.battle.backToActionsBtn?.addEventListener("click", resetPlanningState);
+  ui.battle.backToAttackMenuBtn?.addEventListener("click", () => {
+    show(ui.battle.attackMenu);
+    hide(ui.battle.targetMenu);
   });
 
-  ui.battle.faceTargetBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "paw", targetKey: "face" });
-  });
+  ui.battle.faceTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "face" }));
+  ui.battle.frontLeftTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "frontLeft" }));
+  ui.battle.frontRightTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "frontRight" }));
+  ui.battle.sideTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "side" }));
+  ui.battle.earsTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "ears" }));
+  ui.battle.neckTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "neck" }));
 
-  ui.battle.frontLeftTargetBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "paw", targetKey: "frontLeft" });
-  });
+  ui.shell.openProfileBtn?.addEventListener("click", () => setScreen("profile"));
+  ui.shell.openRoomBtn?.addEventListener("click", () => setScreen("room"));
+  ui.shell.openHistoryBtn?.addEventListener("click", () => setScreen("history"));
+  ui.shell.openPublicProfilesBtn?.addEventListener("click", () => setScreen("publicProfiles"));
+  ui.shell.openAdminBtn?.addEventListener("click", () => setScreen("admin"));
 
-  ui.battle.frontRightTargetBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "paw", targetKey: "frontRight" });
-  });
+  ui.publicProfiles.searchBtn?.addEventListener("click", () => renderPublicProfilesList());
+  ui.publicProfiles.searchInput?.addEventListener("input", () => renderPublicProfilesList());
 
-  ui.battle.sideTargetBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "paw", targetKey: "side" });
-  });
-
-  ui.battle.earsTargetBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "paw", targetKey: "ears" });
-  });
-
-  ui.battle.neckTargetBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "paw", targetKey: "neck" });
-  });
-}
-
-function bindPublicProfilesEvents() {
-  ui.publicProfiles.searchBtn?.addEventListener("click", () => {
-    renderPublicProfilesList(ui.publicProfiles.searchInput?.value || "");
-  });
-
-  ui.publicProfiles.searchInput?.addEventListener("input", () => {
-    renderPublicProfilesList(ui.publicProfiles.searchInput?.value || "");
-  });
-}
-
-function bindAdminEvents() {
-  ui.admin.searchBtn?.addEventListener("click", () => {
-    renderAdmin();
-  });
-
-  ui.admin.searchInput?.addEventListener("input", () => {
-    renderAdmin();
-  });
-
+  ui.admin.searchBtn?.addEventListener("click", renderAdmin);
+  ui.admin.searchInput?.addEventListener("input", renderAdmin);
   ui.admin.refreshBtn?.addEventListener("click", () => {
-    renderAdmin();
+    refreshAdminCaches().then(renderAdmin).catch(error => notifyError(error.message));
+  });
+
+  ui.shell.themeSelect?.addEventListener("change", event => {
+    applyTheme(event.target.value);
+    saveUserVisualPrefs().catch(() => {});
+  });
+  ui.shell.cardStyleSelect?.addEventListener("change", event => {
+    applyCardStyle(event.target.value);
+    saveUserVisualPrefs().catch(() => {});
   });
 }
 
-async function initApp() {
+async function bootstrapApp() {
   injectGroupUi();
+  injectSupplementalStyles();
   ensureUiChrome();
-  renderThemeSelector();
-  renderCardStyleSelector();
-  applyTheme(readThemeLocal());
-  applyCardStyle(readCardStyleLocal());
-  bindAuthEvents();
-  bindShellEvents();
-  bindProfileEvents();
-  bindRoomEvents();
-  bindBattleEvents();
-  bindPublicProfilesEvents();
-  bindAdminEvents();
-  renderRoomIdleState();
-
-  await loadRecentFeedEntries();
-  renderFeedTicker();
+  bindStaticEvents();
   watchFeed();
+  renderRoomIdleState();
+  refreshShellChrome();
+  setScreen("auth");
 
   onAuthStateChanged(auth, async user => {
     try {
       if (user) {
         await handleSignedInUser(user);
         await tryAutoJoinSavedRoom();
-        watchCurrentRoom();
         renderProfile();
+        if (state.currentRoomCode) watchCurrentRoom();
         setScreen("profile");
       } else {
-        cleanupRoomWatcher();
-        cleanupAdminWatchers();
         handleSignedOutUser();
+        cleanupRoomWatcher();
         setScreen("auth");
-        renderRoomIdleState();
       }
-
-      renderAuthState();
-      renderUserBadge();
+      refreshShellChrome();
     } catch (error) {
       console.error(error);
-      notifyError(error.message || "Что-то пошло не так.");
+      notifyError(error.message || "Не удалось инициализировать приложение.");
     }
   });
 }
 
-initApp().catch(error => {
+bootstrapApp().catch(error => {
   console.error(error);
-  notifyError(error.message || "Не удалось запустить сайт.");
+  notifyError(error.message || "Ошибка запуска.");
 });
