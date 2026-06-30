@@ -1674,38 +1674,28 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    // Запрашиваем данные профиля ВК (покажет окошко ВКонтакте)
+    // Явно просим данные у пользователя только при клике на кнопку
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
     
-    const fakeUser = {
-      uid: "vk_" + vkUser.id,
-      email: "vk_" + vkUser.id + "@vk.com" 
-    };
-    
-    // ВАЖНО: Впиши сюда свой цифровой ID ВКонтакте, чтобы у тебя осталась админка!
-    if (String(vkUser.id) === "155297005") {
-      fakeUser.email = ADMIN_EMAIL;
-    }
+    if (vkUser && vkUser.id) {
+       const fakeUser = {
+         uid: "vk_" + vkUser.id,
+         email: "vk_" + vkUser.id + "@vk.com"
+       };
+       
+       if (String(vkUser.id) === "155297005") {
+         fakeUser.email = "zluka.silver@bk.ru";
+       }
 
-    await handleSignedInUser(fakeUser);
-    
-    // Если это новый профиль, красиво подставляем имя и фамилию из ВК
-    if (state.userProfile && state.userProfile.displayName === "Зенит") {
-       await update(ref(db, getProfilePath(fakeUser.uid)), {
-         displayName: vkUser.first_name + " " + vkUser.last_name,
-         updatedAt: now()
-       });
-       state.userProfile.displayName = vkUser.first_name + " " + vkUser.last_name;
+       await handleSignedInUser(fakeUser);
+       await tryAutoJoinSavedRoom();
+       renderProfile();
+       if (state.currentRoomCode) watchCurrentRoom();
+       setScreen("profile");
     }
-
-    await tryAutoJoinSavedRoom();
-    renderProfile();
-    if (state.currentRoomCode) watchCurrentRoom();
-    setScreen("profile");
-    
   } catch (error) {
-    notifyError("Ошибка: разрешите доступ к профилю ВК для входа.");
-    console.error(error);
+    console.error("Ошибка входа:", error);
+    notifyError("Не удалось получить данные ВК. Попробуйте еще раз.");
   }
 }
 
@@ -4949,39 +4939,13 @@ async function bootstrapApp() {
   watchFeed();
   renderRoomIdleState();
   refreshShellChrome();
-
-  // Принудительная инициализация
+  
+  // Просто инициализируем мост и показываем экран входа
   try {
     await vkBridge.send('VKWebAppInit');
   } catch (e) {
-    console.warn("Bridge Init warning:", e);
+    console.warn("Bridge init skip");
   }
-
-  // Попытка получить данные пользователя
-  try {
-    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
-    
-    if (vkUser && vkUser.id) {
-       const fakeUser = {
-         uid: "vk_" + vkUser.id,
-         email: "vk_" + vkUser.id + "@vk.com"
-       };
-       
-       if (String(vkUser.id) === "155297005") {
-         fakeUser.email = "zluka.silver@bk.ru";
-       }
-
-       await handleSignedInUser(fakeUser);
-       await tryAutoJoinSavedRoom();
-       renderProfile();
-       if (state.currentRoomCode) watchCurrentRoom();
-       setScreen("profile");
-       return; // Выход, если всё успешно
-    }
-  } catch (error) {
-    console.error("Авто-вход не удался:", error);
-  }
-
-  // Если не получилось — оставляем экран входа с кнопкой
+  
   setScreen("auth");
 }
