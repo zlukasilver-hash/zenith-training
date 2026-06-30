@@ -125,49 +125,17 @@
 
         <div class="auth-layout">
           <div class="auth-form-card">
-            <label class="field-block">
-              <span class="field-label">Имя профиля</span>
-              <input
-                id="accountName"
-                type="text"
-                class="field-input"
-                placeholder="Например, Зенит"
-              />
-            </label>
-
-            <label class="field-block">
-              <span class="field-label">Почта</span>
-              <input
-                id="emailInput"
-                type="email"
-                class="field-input"
-                placeholder="example@mail.com"
-              />
-            </label>
-
-            <label class="field-block">
-              <span class="field-label">Пароль</span>
-              <input
-                id="passwordInput"
-                type="password"
-                class="field-input"
-                placeholder="••••••••"
-              />
-            </label>
-
-            <div class="auth-actions">
-              <button id="registerBtn" type="button" class="primary-btn">
-                Зарегистрироваться
-              </button>
-              <button id="loginBtn" type="button" class="secondary-btn">
-                Войти
-              </button>
-              <button id="logoutBtn" type="button" class="ghost-btn">
-                Выйти из auth
-              </button>
+            <div style="text-align: center; padding: 20px 0;">
+               <div style="color: var(--accent-3); font-size: 48px; margin-bottom: 16px;">✦</div>
+               <h3 style="margin: 0 0 12px 0; font-size: 20px;">Авторизация ВК</h3>
+               <p style="color: var(--muted); margin-bottom: 24px; line-height: 1.5;">Вам больше не нужен пароль. Система автоматически узнает вас по вашему профилю ВКонтакте.</p>
+               
+               <button id="loginBtn" type="button" class="primary-btn" style="width: 100%; font-size: 16px;">
+                 Войти в систему
+               </button>
             </div>
 
-            <div id="authStatus" class="auth-status">
+            <div id="authStatus" class="auth-status" style="text-align: center; margin-top: 16px;">
               Вы не вошли в аккаунт.
             </div>
           </div>
