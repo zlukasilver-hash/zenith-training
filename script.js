@@ -32,6 +32,7 @@ const firebaseConfig = {
   measurementId: "G-3TYXCHS8FG"
 };
 
+// Найди строку import vkBridge... и замени на:
 import * as vkBridge from "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
@@ -1675,7 +1676,6 @@ async function handleRegister() {
 async function handleLogin() {
   try {
     // Ждем инициализации, если она вдруг не прошла
-    await vkBridge.send('VKWebAppInit'); 
     
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
     
@@ -4869,7 +4869,6 @@ function bindStaticEvents() {
 }
 
 async function bootstrapApp() {
-  console.log("Запуск ZENITH...");
   injectGroupUi();
   injectSupplementalStyles();
   ensureUiChrome();
@@ -4878,15 +4877,16 @@ async function bootstrapApp() {
   renderRoomIdleState();
   refreshShellChrome();
   
+  // Инициализация моста ВК
   try {
-    // Инициализация
     await vkBridge.send('VKWebAppInit');
-    
-    // Проверяем, авторизован ли уже пользователь, если это возможно
-    // В данном случае мы просто всегда показываем экран авторизации
-    setScreen("auth");
+    console.log("VK Bridge инициализирован");
   } catch (e) {
-    console.warn("VK Bridge init failed:", e);
-    setScreen("auth");
+    console.warn("Ошибка инициализации VK Bridge:", e);
   }
+  
+  setScreen("auth");
 }
+
+// Запускаем
+bootstrapApp().catch(error => console.error("Ошибка запуска:", error));
