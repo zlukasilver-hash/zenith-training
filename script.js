@@ -4895,14 +4895,7 @@ async function bootstrapApp() {
   renderRoomIdleState();
   refreshShellChrome();
 
-  // Принудительно загружаем VK Bridge
-  try {
-    await loadVKBridge();
-    await vkBridge.send('VKWebAppInit');
-    console.log("VK Bridge инициализирован");
-  } catch (e) {
-    console.warn("Ошибка инициализации VK Bridge:", e);
-  }
+  console.log("VK Bridge пропущен для теста");
 
   setScreen("auth");
 }
