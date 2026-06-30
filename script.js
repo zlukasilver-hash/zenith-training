@@ -32,8 +32,26 @@ const firebaseConfig = {
   measurementId: "G-3TYXCHS8FG"
 };
 
-// Найди строку import vkBridge... и замени на:
-import * as vkBridge from "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
+// VK Bridge – будет доступен как window.VKBridge (уже загружен через тег <script> в index.html)
+let vkBridge = window.VKBridge;
+
+function loadVKBridge() {
+  return new Promise((resolve, reject) => {
+    if (window.VKBridge) {
+      vkBridge = window.VKBridge;
+      resolve(vkBridge);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js';
+    script.onload = () => {
+      vkBridge = window.VKBridge;
+      resolve(vkBridge);
+    };
+    script.onerror = () => reject(new Error('Не удалось загрузить VK Bridge'));
+    document.head.appendChild(script);
+  });
+}
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
@@ -1675,30 +1693,30 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    // Ждем инициализации, если она вдруг не прошла
-    
-    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
-    
-    if (vkUser && vkUser.id) {
-       const fakeUser = {
-         uid: "vk_" + vkUser.id,
-         email: "vk_" + vkUser.id + "@vk.com"
-       };
-       
-       if (String(vkUser.id) === "155297005") {
-         fakeUser.email = "zluka.silver@bk.ru";
-       }
-
-       await handleSignedInUser(fakeUser);
-       await tryAutoJoinSavedRoom();
-       renderProfile();
-       if (state.currentRoomCode) watchCurrentRoom();
-       setScreen("profile");
-    }
-  } catch (error) {
-    console.error("Ошибка входа:", error);
-    notifyError("ВК не ответил. Попробуйте еще раз.");
+  // Если VK Bridge ещё не загружен – подгружаем
+  if (!vkBridge) {
+    await loadVKBridge();
+    await vkBridge.send('VKWebAppInit');
   }
+  const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+  if (vkUser && vkUser.id) {
+    const fakeUser = {
+      uid: "vk_" + vkUser.id,
+      email: "vk_" + vkUser.id + "@vk.com"
+    };
+    if (String(vkUser.id) === "155297005") {
+      fakeUser.email = "zluka.silver@bk.ru";
+    }
+    await handleSignedInUser(fakeUser);
+    await tryAutoJoinSavedRoom();
+    renderProfile();
+    if (state.currentRoomCode) watchCurrentRoom();
+    setScreen("profile");
+  }
+} catch (error) {
+  console.error("Ошибка входа:", error);
+  notifyError("ВК не ответил. Попробуйте еще раз.");
+}
 }
 
 async function handleLogout() {
@@ -4876,17 +4894,18 @@ async function bootstrapApp() {
   watchFeed();
   renderRoomIdleState();
   refreshShellChrome();
-  
-  // Инициализация моста ВК
+
+  // Инициализация VK Bridge (если он ещё не загружен)
   try {
+    if (!vkBridge) {
+      await loadVKBridge();
+    }
     await vkBridge.send('VKWebAppInit');
     console.log("VK Bridge инициализирован");
   } catch (e) {
     console.warn("Ошибка инициализации VK Bridge:", e);
+    // Можно продолжать, если мы не в VK (например, локальная разработка)
   }
-  
+
   setScreen("auth");
 }
-
-// Запускаем
-bootstrapApp().catch(error => console.error("Ошибка запуска:", error));
