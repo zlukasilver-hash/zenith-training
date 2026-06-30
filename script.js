@@ -1673,28 +1673,51 @@ async function handleRegister() {
 }
 
 async function handleLogin() {
-  const email = ui.auth.email?.value.trim() || "";
-  const password = ui.auth.password?.value.trim() || "";
+  try {
+    // Запрашиваем данные профиля ВК (покажет окошко ВКонтакте)
+    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+    
+    const fakeUser = {
+      uid: "vk_" + vkUser.id,
+      email: "vk_" + vkUser.id + "@vk.com" 
+    };
+    
+    // ВАЖНО: Впиши сюда свой цифровой ID ВКонтакте, чтобы у тебя осталась админка!
+    if (String(vkUser.id) === "155297005") {
+      fakeUser.email = ADMIN_EMAIL;
+    }
 
-  if (!email || !password) {
-    notifyError("Впиши почту и пароль.");
-    return;
+    await handleSignedInUser(fakeUser);
+    
+    // Если это новый профиль, красиво подставляем имя и фамилию из ВК
+    if (state.userProfile && state.userProfile.displayName === "Зенит") {
+       await update(ref(db, getProfilePath(fakeUser.uid)), {
+         displayName: vkUser.first_name + " " + vkUser.last_name,
+         updatedAt: now()
+       });
+       state.userProfile.displayName = vkUser.first_name + " " + vkUser.last_name;
+    }
+
+    await tryAutoJoinSavedRoom();
+    renderProfile();
+    if (state.currentRoomCode) watchCurrentRoom();
+    setScreen("profile");
+    
+  } catch (error) {
+    notifyError("Ошибка: разрешите доступ к профилю ВК для входа.");
+    console.error(error);
   }
-
-  const credentials = await signInWithEmailAndPassword(auth, email, password);
-  const profile = await ensureOwnProfile(credentials.user);
-  text(ui.auth.status, `Вы вошли как ${profile.displayName || "Зенит"}.`);
 }
 
 async function handleLogout() {
-  await signOut(auth);
   clearActiveRoomLocal();
   state.currentRoomCode = "";
   state.currentParticipantKey = "";
   state.currentRoomSnapshot = null;
   stopRoomTimer();
-  text(ui.auth.status, "Вы не вошли в аккаунт.");
-  notify("Вы вышли из аккаунта.");
+  handleSignedOutUser();
+  setScreen("auth");
+  notify("Вы вышли из профиля.");
 }
 
 async function handleSignedInUser(user) {
@@ -4926,25 +4949,29 @@ async function bootstrapApp() {
   refreshShellChrome();
   setScreen("auth");
 
-  onAuthStateChanged(auth, async user => {
+  // Магия ВК: он сам передает ID пользователя при загрузке приложения
+  const urlParams = new URLSearchParams(window.location.search);
+  const vkUserId = urlParams.get('vk_user_id');
+
+  if (vkUserId) {
     try {
-      if (user) {
-        await handleSignedInUser(user);
-        await tryAutoJoinSavedRoom();
-        renderProfile();
-        if (state.currentRoomCode) watchCurrentRoom();
-        setScreen("profile");
-      } else {
-        handleSignedOutUser();
-        cleanupRoomWatcher();
-        setScreen("auth");
+      const fakeUser = { uid: "vk_" + vkUserId, email: "vk_" + vkUserId + "@vk.com" };
+      
+      // ВАЖНО: Сюда ТОЖЕ впиши свой ID ВКонтакте, чтобы у тебя работала админка!
+      if (String(vkUserId) === "ТВОЙ_ID_ВКОНТАКТЕ") {
+         fakeUser.email = ADMIN_EMAIL;
       }
-      refreshShellChrome();
+
+      await handleSignedInUser(fakeUser);
+      await tryAutoJoinSavedRoom();
+      renderProfile();
+      if (state.currentRoomCode) watchCurrentRoom();
+      setScreen("profile");
     } catch (error) {
       console.error(error);
-      notifyError(error.message || "Не удалось инициализировать приложение.");
+      notifyError("Не удалось загрузить профиль автоматически.");
     }
-  });
+  }
 }
 
 bootstrapApp().catch(error => {
