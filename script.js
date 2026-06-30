@@ -4887,15 +4887,15 @@ function bindStaticEvents() {
 }
 
 async function bootstrapApp() {
-  injectGroupUi();
-  injectSupplementalStyles();
-  ensureUiChrome();
-  bindStaticEvents();
-  watchFeed();
-  renderRoomIdleState();
-  refreshShellChrome();
+  // injectGroupUi();
+  // injectSupplementalStyles();
+  // ensureUiChrome();
+  // bindStaticEvents();
+  // watchFeed();
+  // renderRoomIdleState();
+  // refreshShellChrome();
 
-  console.log("VK Bridge пропущен для теста");
+  // console.log("VK Bridge пропущен для теста");
 
   setScreen("auth");
 }
