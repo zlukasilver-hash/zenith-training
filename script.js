@@ -254,120 +254,6 @@ const auth = getAuth(app);
 
 const byId = id => document.getElementById(id);
 
-const ui = {
-  screens: {
-    auth: byId("authScreen"),
-    profile: byId("profileScreen"),
-    room: byId("roomScreen"),
-    battle: byId("battleScreen"),
-    admin: byId("adminScreen"),
-    history: byId("historyScreen"),
-    publicProfiles: byId("publicProfilesScreen")
-  },
-  shell: {
-    currentUserBadge: byId("currentUserBadge"),
-    globalNotice: byId("globalNotice"),
-    currentRoomBadge: byId("currentRoomBadge"),
-    openProfileBtn: byId("openProfileBtn"),
-    openRoomBtn: byId("openRoomBtn"),
-    openAdminBtn: byId("openAdminBtn"),
-    openHistoryBtn: byId("openHistoryBtn"),
-    openPublicProfilesBtn: byId("openPublicProfilesBtn"),
-    mainLogoutBtn: byId("mainLogoutBtn"),
-    themeSelect: byId("themeSelect"),
-    cardStyleSelect: byId("cardStyleSelect"),
-    feedTicker: byId("feedTicker")
-  },
-  auth: {
-    accountName: byId("accountName"),
-    email: byId("emailInput"),
-    password: byId("passwordInput"),
-    registerBtn: byId("registerBtn"),
-    loginBtn: byId("loginBtn"),
-    logoutBtn: byId("logoutBtn"),
-    status: byId("authStatus")
-  },
-  profile: {
-    name: byId("profileName"),
-    statusText: byId("profileStatusText"),
-    statusInput: byId("profileStatusInput"),
-    saveProfileBtn: byId("saveProfileBtn"),
-    symbolSelect: byId("profileSymbolSelect"),
-    portraitInitials: byId("profilePortraitInitials"),
-    savePortraitSymbolBtn: byId("savePortraitSymbolBtn"),
-    activeCharacterSelect: byId("activeCharacterSelect"),
-    charactersList: byId("charactersList"),
-    addCharacterBtn: byId("addCharacterBtn"),
-    charNameInput: byId("charNameInput"),
-    charClanInput: byId("charClanInput"),
-    charTrainingStatusSelect: byId("charTrainingStatusSelect"),
-    characterSearchInput: byId("characterSearchInput"),
-    ownerNoteInput: byId("ownerNoteInput"),
-    saveOwnerNoteBtn: byId("saveOwnerNoteBtn")
-  },
-  room: {
-    playerNameMirror: byId("playerNameMirror"),
-    activeCharacterMirror: byId("activeCharacterMirror"),
-    roomCodeInput: byId("roomCodeInput"),
-    createRoomBtn: byId("createRoomBtn"),
-    joinRoomBtn: byId("joinRoomBtn"),
-    leaveRoomBtn: byId("leaveRoomBtn"),
-    copyRoomCodeBtn: byId("copyRoomCodeBtn"),
-    startBattleBtn: byId("startBattleBtn"),
-    readyToggleBtn: byId("readyToggleBtn"),
-    statusLog: byId("statusLog"),
-    roomPlayers: byId("roomPlayers"),
-    roomMeta: byId("roomMeta"),
-    creditBadge: byId("trainingCreditBadge"),
-    creditReasonBox: byId("trainingCreditReasonBox"),
-    waitingStateBox: byId("waitingStateBox"),
-    roomTimer: byId("roomTimer"),
-    roomResultCard: byId("roomResultCard")
-  },
-  battle: {
-    screen: byId("battleScreen"),
-    info: byId("battleInfo"),
-    log: byId("battleLog"),
-    actions: byId("battleActions"),
-    attackMenu: byId("attackMenu"),
-    targetMenu: byId("targetMenu"),
-    attackActionBtn: byId("attackActionBtn"),
-    defendActionBtn: byId("defendActionBtn"),
-    escapeActionBtn: byId("escapeActionBtn"),
-    sandAttackBtn: byId("sandAttackBtn"),
-    pawAttackBtn: byId("pawAttackBtn"),
-    tripAttackBtn: byId("tripAttackBtn"),
-    backToActionsBtn: byId("backToActionsBtn"),
-    backToAttackMenuBtn: byId("backToAttackMenuBtn"),
-    faceTargetBtn: byId("faceTargetBtn"),
-    frontLeftTargetBtn: byId("frontLeftTargetBtn"),
-    frontRightTargetBtn: byId("frontRightTargetBtn"),
-    sideTargetBtn: byId("sideTargetBtn"),
-    earsTargetBtn: byId("earsTargetBtn"),
-    neckTargetBtn: byId("neckTargetBtn"),
-    opponentChosenBadge: byId("opponentChosenBadge")
-  },
-  history: { list: byId("myTrainingsList") },
-  publicProfiles: {
-    searchInput: byId("publicProfileSearchInput"),
-    searchBtn: byId("publicProfileSearchBtn"),
-    list: byId("publicProfilesList"),
-    details: byId("publicProfileDetails")
-  },
-  admin: {
-    panel: byId("adminScreen"),
-    summary: byId("adminSummary"),
-    playersList: byId("adminPlayersList"),
-    charactersList: byId("adminCharactersList"),
-    roomsList: byId("adminRoomsList"),
-    matchesList: byId("adminMatchesList"),
-    playerHistoryList: byId("adminPlayerHistoryList"),
-    searchInput: byId("adminCharacterSearchInput"),
-    searchBtn: byId("adminCharacterSearchBtn"),
-    refreshBtn: byId("adminRefreshBtn")
-  }
-};
-
 const state = {
   user: null,
   userProfile: null,
@@ -399,6 +285,123 @@ const state = {
   currentRoomSnapshot: null,
   pendingMatchSaveRooms: new Set()
 };
+
+let ui = {};
+
+function initUi() {
+  const byId = id => document.getElementById(id);
+  ui.screens = {
+    auth: byId("authScreen"),
+    profile: byId("profileScreen"),
+    room: byId("roomScreen"),
+    battle: byId("battleScreen"),
+    admin: byId("adminScreen"),
+    history: byId("historyScreen"),
+    publicProfiles: byId("publicProfilesScreen")
+  };
+  ui.shell = {
+    currentUserBadge: byId("currentUserBadge"),
+    globalNotice: byId("globalNotice"),
+    currentRoomBadge: byId("currentRoomBadge"),
+    openProfileBtn: byId("openProfileBtn"),
+    openRoomBtn: byId("openRoomBtn"),
+    openAdminBtn: byId("openAdminBtn"),
+    openHistoryBtn: byId("openHistoryBtn"),
+    openPublicProfilesBtn: byId("openPublicProfilesBtn"),
+    mainLogoutBtn: byId("mainLogoutBtn"),
+    themeSelect: byId("themeSelect"),
+    cardStyleSelect: byId("cardStyleSelect"),
+    feedTicker: byId("feedTicker")
+  };
+  ui.auth = {
+    accountName: byId("accountName"),
+    email: byId("emailInput"),
+    password: byId("passwordInput"),
+    registerBtn: byId("registerBtn"),
+    loginBtn: byId("loginBtn"),
+    logoutBtn: byId("logoutBtn"),
+    status: byId("authStatus")
+  };
+  ui.profile = {
+    name: byId("profileName"),
+    statusText: byId("profileStatusText"),
+    statusInput: byId("profileStatusInput"),
+    saveProfileBtn: byId("saveProfileBtn"),
+    symbolSelect: byId("profileSymbolSelect"),
+    portraitInitials: byId("profilePortraitInitials"),
+    savePortraitSymbolBtn: byId("savePortraitSymbolBtn"),
+    activeCharacterSelect: byId("activeCharacterSelect"),
+    charactersList: byId("charactersList"),
+    addCharacterBtn: byId("addCharacterBtn"),
+    charNameInput: byId("charNameInput"),
+    charClanInput: byId("charClanInput"),
+    charTrainingStatusSelect: byId("charTrainingStatusSelect"),
+    characterSearchInput: byId("characterSearchInput"),
+    ownerNoteInput: byId("ownerNoteInput"),
+    saveOwnerNoteBtn: byId("saveOwnerNoteBtn")
+  };
+  ui.room = {
+    playerNameMirror: byId("playerNameMirror"),
+    activeCharacterMirror: byId("activeCharacterMirror"),
+    roomCodeInput: byId("roomCodeInput"),
+    createRoomBtn: byId("createRoomBtn"),
+    joinRoomBtn: byId("joinRoomBtn"),
+    leaveRoomBtn: byId("leaveRoomBtn"),
+    copyRoomCodeBtn: byId("copyRoomCodeBtn"),
+    startBattleBtn: byId("startBattleBtn"),
+    readyToggleBtn: byId("readyToggleBtn"),
+    statusLog: byId("statusLog"),
+    roomPlayers: byId("roomPlayers"),
+    roomMeta: byId("roomMeta"),
+    creditBadge: byId("trainingCreditBadge"),
+    creditReasonBox: byId("trainingCreditReasonBox"),
+    waitingStateBox: byId("waitingStateBox"),
+    roomTimer: byId("roomTimer"),
+    roomResultCard: byId("roomResultCard")
+  };
+  ui.battle = {
+    screen: byId("battleScreen"),
+    info: byId("battleInfo"),
+    log: byId("battleLog"),
+    actions: byId("battleActions"),
+    attackMenu: byId("attackMenu"),
+    targetMenu: byId("targetMenu"),
+    attackActionBtn: byId("attackActionBtn"),
+    defendActionBtn: byId("defendActionBtn"),
+    escapeActionBtn: byId("escapeActionBtn"),
+    sandAttackBtn: byId("sandAttackBtn"),
+    pawAttackBtn: byId("pawAttackBtn"),
+    tripAttackBtn: byId("tripAttackBtn"),
+    backToActionsBtn: byId("backToActionsBtn"),
+    backToAttackMenuBtn: byId("backToAttackMenuBtn"),
+    faceTargetBtn: byId("faceTargetBtn"),
+    frontLeftTargetBtn: byId("frontLeftTargetBtn"),
+    frontRightTargetBtn: byId("frontRightTargetBtn"),
+    sideTargetBtn: byId("sideTargetBtn"),
+    earsTargetBtn: byId("earsTargetBtn"),
+    neckTargetBtn: byId("neckTargetBtn"),
+    opponentChosenBadge: byId("opponentChosenBadge")
+  };
+  ui.history = { list: byId("myTrainingsList") };
+  ui.publicProfiles = {
+    searchInput: byId("publicProfileSearchInput"),
+    searchBtn: byId("publicProfileSearchBtn"),
+    list: byId("publicProfilesList"),
+    details: byId("publicProfileDetails")
+  };
+  ui.admin = {
+    panel: byId("adminScreen"),
+    summary: byId("adminSummary"),
+    playersList: byId("adminPlayersList"),
+    charactersList: byId("adminCharactersList"),
+    roomsList: byId("adminRoomsList"),
+    matchesList: byId("adminMatchesList"),
+    playerHistoryList: byId("adminPlayerHistoryList"),
+    searchInput: byId("adminCharacterSearchInput"),
+    searchBtn: byId("adminCharacterSearchBtn"),
+    refreshBtn: byId("adminRefreshBtn")
+  };
+}
 
 function now() {
   return Date.now();
@@ -4887,6 +4890,8 @@ function bindStaticEvents() {
 }
 
 async function bootstrapApp() {
+  initUi(); // <-- добавить сюда
+
   // injectGroupUi();
   // injectSupplementalStyles();
   // ensureUiChrome();
