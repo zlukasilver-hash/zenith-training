@@ -32,7 +32,7 @@ const firebaseConfig = {
   measurementId: "G-3TYXCHS8FG"
 };
 
-import vkBridge from "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
+import * as vkBridge from "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
@@ -1674,7 +1674,9 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    // Явно просим данные у пользователя только при клике на кнопку
+    // Ждем инициализации, если она вдруг не прошла
+    await vkBridge.send('VKWebAppInit'); 
+    
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
     
     if (vkUser && vkUser.id) {
@@ -1695,7 +1697,7 @@ async function handleLogin() {
     }
   } catch (error) {
     console.error("Ошибка входа:", error);
-    notifyError("Не удалось получить данные ВК. Попробуйте еще раз.");
+    notifyError("ВК не ответил. Попробуйте еще раз.");
   }
 }
 
@@ -4867,6 +4869,7 @@ function bindStaticEvents() {
 }
 
 async function bootstrapApp() {
+  console.log("Запуск ZENITH...");
   injectGroupUi();
   injectSupplementalStyles();
   ensureUiChrome();
@@ -4875,14 +4878,15 @@ async function bootstrapApp() {
   renderRoomIdleState();
   refreshShellChrome();
   
-  // Инициализация моста
   try {
+    // Инициализация
     await vkBridge.send('VKWebAppInit');
+    
+    // Проверяем, авторизован ли уже пользователь, если это возможно
+    // В данном случае мы просто всегда показываем экран авторизации
+    setScreen("auth");
   } catch (e) {
-    console.warn("Bridge init skip");
+    console.warn("VK Bridge init failed:", e);
+    setScreen("auth");
   }
-  
-  setScreen("auth");
 }
-
-bootstrapApp();
