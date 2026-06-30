@@ -32,30 +32,7 @@ const firebaseConfig = {
   measurementId: "G-3TYXCHS8FG"
 };
 
-// VK Bridge – будет доступен как window.VKBridge (уже загружен через тег <script> в index.html)
-let vkBridge = window.VKBridge;
-
-function loadVKBridge() {
-  return new Promise((resolve, reject) => {
-    if (window.VKBridge && typeof window.VKBridge.send === 'function') {
-      vkBridge = window.VKBridge;
-      resolve(vkBridge);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js';
-    script.onload = () => {
-      if (window.VKBridge && typeof window.VKBridge.send === 'function') {
-        vkBridge = window.VKBridge;
-        resolve(vkBridge);
-      } else {
-        reject(new Error('VK Bridge загружен, но не инициализирован'));
-      }
-    };
-    script.onerror = () => reject(new Error('Не удалось загрузить VK Bridge'));
-    document.head.appendChild(script);
-  });
-}
+vkBridge.send('VKWebAppInit');
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
@@ -254,6 +231,120 @@ const auth = getAuth(app);
 
 const byId = id => document.getElementById(id);
 
+const ui = {
+  screens: {
+    auth: byId("authScreen"),
+    profile: byId("profileScreen"),
+    room: byId("roomScreen"),
+    battle: byId("battleScreen"),
+    admin: byId("adminScreen"),
+    history: byId("historyScreen"),
+    publicProfiles: byId("publicProfilesScreen")
+  },
+  shell: {
+    currentUserBadge: byId("currentUserBadge"),
+    globalNotice: byId("globalNotice"),
+    currentRoomBadge: byId("currentRoomBadge"),
+    openProfileBtn: byId("openProfileBtn"),
+    openRoomBtn: byId("openRoomBtn"),
+    openAdminBtn: byId("openAdminBtn"),
+    openHistoryBtn: byId("openHistoryBtn"),
+    openPublicProfilesBtn: byId("openPublicProfilesBtn"),
+    mainLogoutBtn: byId("mainLogoutBtn"),
+    themeSelect: byId("themeSelect"),
+    cardStyleSelect: byId("cardStyleSelect"),
+    feedTicker: byId("feedTicker")
+  },
+  auth: {
+    accountName: byId("accountName"),
+    email: byId("emailInput"),
+    password: byId("passwordInput"),
+    registerBtn: byId("registerBtn"),
+    loginBtn: byId("loginBtn"),
+    logoutBtn: byId("logoutBtn"),
+    status: byId("authStatus")
+  },
+  profile: {
+    name: byId("profileName"),
+    statusText: byId("profileStatusText"),
+    statusInput: byId("profileStatusInput"),
+    saveProfileBtn: byId("saveProfileBtn"),
+    symbolSelect: byId("profileSymbolSelect"),
+    portraitInitials: byId("profilePortraitInitials"),
+    savePortraitSymbolBtn: byId("savePortraitSymbolBtn"),
+    activeCharacterSelect: byId("activeCharacterSelect"),
+    charactersList: byId("charactersList"),
+    addCharacterBtn: byId("addCharacterBtn"),
+    charNameInput: byId("charNameInput"),
+    charClanInput: byId("charClanInput"),
+    charTrainingStatusSelect: byId("charTrainingStatusSelect"),
+    characterSearchInput: byId("characterSearchInput"),
+    ownerNoteInput: byId("ownerNoteInput"),
+    saveOwnerNoteBtn: byId("saveOwnerNoteBtn")
+  },
+  room: {
+    playerNameMirror: byId("playerNameMirror"),
+    activeCharacterMirror: byId("activeCharacterMirror"),
+    roomCodeInput: byId("roomCodeInput"),
+    createRoomBtn: byId("createRoomBtn"),
+    joinRoomBtn: byId("joinRoomBtn"),
+    leaveRoomBtn: byId("leaveRoomBtn"),
+    copyRoomCodeBtn: byId("copyRoomCodeBtn"),
+    startBattleBtn: byId("startBattleBtn"),
+    readyToggleBtn: byId("readyToggleBtn"),
+    statusLog: byId("statusLog"),
+    roomPlayers: byId("roomPlayers"),
+    roomMeta: byId("roomMeta"),
+    creditBadge: byId("trainingCreditBadge"),
+    creditReasonBox: byId("trainingCreditReasonBox"),
+    waitingStateBox: byId("waitingStateBox"),
+    roomTimer: byId("roomTimer"),
+    roomResultCard: byId("roomResultCard")
+  },
+  battle: {
+    screen: byId("battleScreen"),
+    info: byId("battleInfo"),
+    log: byId("battleLog"),
+    actions: byId("battleActions"),
+    attackMenu: byId("attackMenu"),
+    targetMenu: byId("targetMenu"),
+    attackActionBtn: byId("attackActionBtn"),
+    defendActionBtn: byId("defendActionBtn"),
+    escapeActionBtn: byId("escapeActionBtn"),
+    sandAttackBtn: byId("sandAttackBtn"),
+    pawAttackBtn: byId("pawAttackBtn"),
+    tripAttackBtn: byId("tripAttackBtn"),
+    backToActionsBtn: byId("backToActionsBtn"),
+    backToAttackMenuBtn: byId("backToAttackMenuBtn"),
+    faceTargetBtn: byId("faceTargetBtn"),
+    frontLeftTargetBtn: byId("frontLeftTargetBtn"),
+    frontRightTargetBtn: byId("frontRightTargetBtn"),
+    sideTargetBtn: byId("sideTargetBtn"),
+    earsTargetBtn: byId("earsTargetBtn"),
+    neckTargetBtn: byId("neckTargetBtn"),
+    opponentChosenBadge: byId("opponentChosenBadge")
+  },
+  history: { list: byId("myTrainingsList") },
+  publicProfiles: {
+    searchInput: byId("publicProfileSearchInput"),
+    searchBtn: byId("publicProfileSearchBtn"),
+    list: byId("publicProfilesList"),
+    details: byId("publicProfileDetails")
+  },
+  admin: {
+    panel: byId("adminScreen"),
+    summary: byId("adminSummary"),
+    playersList: byId("adminPlayersList"),
+    charactersList: byId("adminCharactersList"),
+    roomsList: byId("adminRoomsList"),
+    matchesList: byId("adminMatchesList"),
+    playerHistoryList: byId("adminPlayerHistoryList"),
+    searchInput: byId("adminCharacterSearchInput"),
+    searchBtn: byId("adminCharacterSearchBtn"),
+    refreshBtn: byId("adminRefreshBtn")
+  }
+};
+
 const state = {
   user: null,
   userProfile: null,
@@ -285,123 +376,6 @@ const state = {
   currentRoomSnapshot: null,
   pendingMatchSaveRooms: new Set()
 };
-
-let ui = {};
-
-function initUi() {
-  const byId = id => document.getElementById(id);
-  ui.screens = {
-    auth: byId("authScreen"),
-    profile: byId("profileScreen"),
-    room: byId("roomScreen"),
-    battle: byId("battleScreen"),
-    admin: byId("adminScreen"),
-    history: byId("historyScreen"),
-    publicProfiles: byId("publicProfilesScreen")
-  };
-  ui.shell = {
-    currentUserBadge: byId("currentUserBadge"),
-    globalNotice: byId("globalNotice"),
-    currentRoomBadge: byId("currentRoomBadge"),
-    openProfileBtn: byId("openProfileBtn"),
-    openRoomBtn: byId("openRoomBtn"),
-    openAdminBtn: byId("openAdminBtn"),
-    openHistoryBtn: byId("openHistoryBtn"),
-    openPublicProfilesBtn: byId("openPublicProfilesBtn"),
-    mainLogoutBtn: byId("mainLogoutBtn"),
-    themeSelect: byId("themeSelect"),
-    cardStyleSelect: byId("cardStyleSelect"),
-    feedTicker: byId("feedTicker")
-  };
-  ui.auth = {
-    accountName: byId("accountName"),
-    email: byId("emailInput"),
-    password: byId("passwordInput"),
-    registerBtn: byId("registerBtn"),
-    loginBtn: byId("loginBtn"),
-    logoutBtn: byId("logoutBtn"),
-    status: byId("authStatus")
-  };
-  ui.profile = {
-    name: byId("profileName"),
-    statusText: byId("profileStatusText"),
-    statusInput: byId("profileStatusInput"),
-    saveProfileBtn: byId("saveProfileBtn"),
-    symbolSelect: byId("profileSymbolSelect"),
-    portraitInitials: byId("profilePortraitInitials"),
-    savePortraitSymbolBtn: byId("savePortraitSymbolBtn"),
-    activeCharacterSelect: byId("activeCharacterSelect"),
-    charactersList: byId("charactersList"),
-    addCharacterBtn: byId("addCharacterBtn"),
-    charNameInput: byId("charNameInput"),
-    charClanInput: byId("charClanInput"),
-    charTrainingStatusSelect: byId("charTrainingStatusSelect"),
-    characterSearchInput: byId("characterSearchInput"),
-    ownerNoteInput: byId("ownerNoteInput"),
-    saveOwnerNoteBtn: byId("saveOwnerNoteBtn")
-  };
-  ui.room = {
-    playerNameMirror: byId("playerNameMirror"),
-    activeCharacterMirror: byId("activeCharacterMirror"),
-    roomCodeInput: byId("roomCodeInput"),
-    createRoomBtn: byId("createRoomBtn"),
-    joinRoomBtn: byId("joinRoomBtn"),
-    leaveRoomBtn: byId("leaveRoomBtn"),
-    copyRoomCodeBtn: byId("copyRoomCodeBtn"),
-    startBattleBtn: byId("startBattleBtn"),
-    readyToggleBtn: byId("readyToggleBtn"),
-    statusLog: byId("statusLog"),
-    roomPlayers: byId("roomPlayers"),
-    roomMeta: byId("roomMeta"),
-    creditBadge: byId("trainingCreditBadge"),
-    creditReasonBox: byId("trainingCreditReasonBox"),
-    waitingStateBox: byId("waitingStateBox"),
-    roomTimer: byId("roomTimer"),
-    roomResultCard: byId("roomResultCard")
-  };
-  ui.battle = {
-    screen: byId("battleScreen"),
-    info: byId("battleInfo"),
-    log: byId("battleLog"),
-    actions: byId("battleActions"),
-    attackMenu: byId("attackMenu"),
-    targetMenu: byId("targetMenu"),
-    attackActionBtn: byId("attackActionBtn"),
-    defendActionBtn: byId("defendActionBtn"),
-    escapeActionBtn: byId("escapeActionBtn"),
-    sandAttackBtn: byId("sandAttackBtn"),
-    pawAttackBtn: byId("pawAttackBtn"),
-    tripAttackBtn: byId("tripAttackBtn"),
-    backToActionsBtn: byId("backToActionsBtn"),
-    backToAttackMenuBtn: byId("backToAttackMenuBtn"),
-    faceTargetBtn: byId("faceTargetBtn"),
-    frontLeftTargetBtn: byId("frontLeftTargetBtn"),
-    frontRightTargetBtn: byId("frontRightTargetBtn"),
-    sideTargetBtn: byId("sideTargetBtn"),
-    earsTargetBtn: byId("earsTargetBtn"),
-    neckTargetBtn: byId("neckTargetBtn"),
-    opponentChosenBadge: byId("opponentChosenBadge")
-  };
-  ui.history = { list: byId("myTrainingsList") };
-  ui.publicProfiles = {
-    searchInput: byId("publicProfileSearchInput"),
-    searchBtn: byId("publicProfileSearchBtn"),
-    list: byId("publicProfilesList"),
-    details: byId("publicProfileDetails")
-  };
-  ui.admin = {
-    panel: byId("adminScreen"),
-    summary: byId("adminSummary"),
-    playersList: byId("adminPlayersList"),
-    charactersList: byId("adminCharactersList"),
-    roomsList: byId("adminRoomsList"),
-    matchesList: byId("adminMatchesList"),
-    playerHistoryList: byId("adminPlayerHistoryList"),
-    searchInput: byId("adminCharacterSearchInput"),
-    searchBtn: byId("adminCharacterSearchBtn"),
-    refreshBtn: byId("adminRefreshBtn")
-  };
-}
 
 function now() {
   return Date.now();
@@ -1700,25 +1674,38 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    await loadVKBridge();
+    // Запрашиваем данные профиля ВК (покажет окошко ВКонтакте)
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
-    if (vkUser && vkUser.id) {
-      const fakeUser = {
-        uid: "vk_" + vkUser.id,
-        email: "vk_" + vkUser.id + "@vk.com"
-      };
-      if (String(vkUser.id) === "155297005") {
-        fakeUser.email = "zluka.silver@bk.ru";
-      }
-      await handleSignedInUser(fakeUser);
-      await tryAutoJoinSavedRoom();
-      renderProfile();
-      if (state.currentRoomCode) watchCurrentRoom();
-      setScreen("profile");
+    
+    const fakeUser = {
+      uid: "vk_" + vkUser.id,
+      email: "vk_" + vkUser.id + "@vk.com" 
+    };
+    
+    // ВАЖНО: Впиши сюда свой цифровой ID ВКонтакте, чтобы у тебя осталась админка!
+    if (String(vkUser.id) === "155297005") {
+      fakeUser.email = ADMIN_EMAIL;
     }
+
+    await handleSignedInUser(fakeUser);
+    
+    // Если это новый профиль, красиво подставляем имя и фамилию из ВК
+    if (state.userProfile && state.userProfile.displayName === "Зенит") {
+       await update(ref(db, getProfilePath(fakeUser.uid)), {
+         displayName: vkUser.first_name + " " + vkUser.last_name,
+         updatedAt: now()
+       });
+       state.userProfile.displayName = vkUser.first_name + " " + vkUser.last_name;
+    }
+
+    await tryAutoJoinSavedRoom();
+    renderProfile();
+    if (state.currentRoomCode) watchCurrentRoom();
+    setScreen("profile");
+    
   } catch (error) {
-    console.error("Ошибка входа:", error);
-    notifyError("ВК не ответил. Попробуйте еще раз.");
+    notifyError("Ошибка: разрешите доступ к профилю ВК для входа.");
+    console.error(error);
   }
 }
 
@@ -4877,7 +4864,70 @@ function bindStaticEvents() {
   });
   ui.profile.characterSearchInput?.addEventListener("input", renderProfile);
 
-  // ... (оставь здесь все остальные addEventListener, которые у тебя были) ...
+  ui.room.createRoomBtn?.addEventListener("click", () => createRoom().catch(error => notifyError(error.message)));
+  ui.room.joinRoomBtn?.addEventListener("click", () => joinRoom().catch(error => notifyError(error.message)));
+  ui.room.leaveRoomBtn?.addEventListener("click", () => leaveRoom().catch(error => notifyError(error.message)));
+  ui.room.readyToggleBtn?.addEventListener("click", () => toggleReady().catch(error => notifyError(error.message)));
+  ui.room.startBattleBtn?.addEventListener("click", () => startBattle().catch(error => notifyError(error.message)));
+  ui.room.copyRoomCodeBtn?.addEventListener("click", async () => {
+    if (!state.currentRoomCode) {
+      notifyError("Сначала открой комнату.");
+      return;
+    }
+    await navigator.clipboard.writeText(state.currentRoomCode);
+    notify("Код комнаты скопирован.");
+  });
+
+  byId("groupModeSelect")?.addEventListener("change", event => {
+    setRoomMode(event.target.value).catch(error => notifyError(error.message));
+  });
+
+  ui.battle.attackActionBtn?.addEventListener("click", startAttackPlanning);
+  ui.battle.defendActionBtn?.addEventListener("click", () => {
+    submitBattleAction({ kind: "defend" }).catch(error => notifyError(error.message));
+  });
+  ui.battle.escapeActionBtn?.addEventListener("click", () => {
+    submitBattleAction({ kind: "escape" }).catch(error => notifyError(error.message));
+  });
+
+  ui.battle.sandAttackBtn?.addEventListener("click", () => {
+    commitPlannedAttackStep({ type: "sand" });
+  });
+  ui.battle.pawAttackBtn?.addEventListener("click", () => {
+    state.planningAttack.pendingType = "paw";
+    hide(ui.battle.attackMenu);
+    show(ui.battle.targetMenu);
+  });
+  ui.battle.tripAttackBtn?.addEventListener("click", () => {
+    commitPlannedAttackStep({ type: "trip" });
+  });
+  ui.battle.backToActionsBtn?.addEventListener("click", resetPlanningState);
+  ui.battle.backToAttackMenuBtn?.addEventListener("click", () => {
+    show(ui.battle.attackMenu);
+    hide(ui.battle.targetMenu);
+  });
+
+  ui.battle.faceTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "face" }));
+  ui.battle.frontLeftTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "frontLeft" }));
+  ui.battle.frontRightTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "frontRight" }));
+  ui.battle.sideTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "side" }));
+  ui.battle.earsTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "ears" }));
+  ui.battle.neckTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "neck" }));
+
+  ui.shell.openProfileBtn?.addEventListener("click", () => setScreen("profile"));
+  ui.shell.openRoomBtn?.addEventListener("click", () => setScreen("room"));
+  ui.shell.openHistoryBtn?.addEventListener("click", () => setScreen("history"));
+  ui.shell.openPublicProfilesBtn?.addEventListener("click", () => setScreen("publicProfiles"));
+  ui.shell.openAdminBtn?.addEventListener("click", () => setScreen("admin"));
+
+  ui.publicProfiles.searchBtn?.addEventListener("click", () => renderPublicProfilesList());
+  ui.publicProfiles.searchInput?.addEventListener("input", () => renderPublicProfilesList());
+
+  ui.admin.searchBtn?.addEventListener("click", renderAdmin);
+  ui.admin.searchInput?.addEventListener("input", renderAdmin);
+  ui.admin.refreshBtn?.addEventListener("click", () => {
+    refreshAdminCaches().then(renderAdmin).catch(error => notifyError(error.message));
+  });
 
   ui.shell.themeSelect?.addEventListener("change", event => {
     applyTheme(event.target.value);
@@ -4889,18 +4939,55 @@ function bindStaticEvents() {
   });
 }
 
+// ... (тут идет весь твой остальной код) ...
+
 async function bootstrapApp() {
-  initUi(); // <-- добавить сюда
-
-  // injectGroupUi();
-  // injectSupplementalStyles();
-  // ensureUiChrome();
-  // bindStaticEvents();
-  // watchFeed();
-  // renderRoomIdleState();
-  // refreshShellChrome();
-
-  // console.log("VK Bridge пропущен для теста");
-
+  injectGroupUi();
+  injectSupplementalStyles();
+  ensureUiChrome();
+  bindStaticEvents();
+  watchFeed();
+  renderRoomIdleState();
+  refreshShellChrome();
   setScreen("auth");
+
+  // Инициализация моста
+  try {
+    await vkBridge.send('VKWebAppInit');
+  } catch (e) {
+    console.error("Ошибка инициализации VK Bridge:", e);
+  }
+
+  // Сразу пытаемся получить данные пользователя при загрузке
+  try {
+    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+    if (vkUser && vkUser.id) {
+       const fakeUser = {
+         uid: "vk_" + vkUser.id,
+         email: "vk_" + vkUser.id + "@vk.com"
+       };
+       
+       // ВАЖНО: Вставь сюда свой цифровой ID ВКонтакте!
+       if (String(vkUser.id) === "155297005") {
+         fakeUser.email = ADMIN_EMAIL;
+       }
+
+       await handleSignedInUser(fakeUser);
+       await tryAutoJoinSavedRoom();
+       renderProfile();
+       if (state.currentRoomCode) watchCurrentRoom();
+       setScreen("profile");
+    } else {
+       setScreen("auth");
+    }
+  } catch (error) {
+    console.error("Ошибка входа через ВК:", error);
+    setScreen("auth");
+  }
 }
+
+// Запускаем всё это дело
+bootstrapApp().catch(error => {
+  console.error(error);
+  notifyError(error.message || "Ошибка запуска.");
+});
