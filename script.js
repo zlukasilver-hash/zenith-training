@@ -32,7 +32,7 @@ const firebaseConfig = {
   measurementId: "G-3TYXCHS8FG"
 };
 
-vkBridge.send('VKWebAppInit');
+import vkBridge from "https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js";
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
@@ -4854,70 +4854,7 @@ function bindStaticEvents() {
   });
   ui.profile.characterSearchInput?.addEventListener("input", renderProfile);
 
-  ui.room.createRoomBtn?.addEventListener("click", () => createRoom().catch(error => notifyError(error.message)));
-  ui.room.joinRoomBtn?.addEventListener("click", () => joinRoom().catch(error => notifyError(error.message)));
-  ui.room.leaveRoomBtn?.addEventListener("click", () => leaveRoom().catch(error => notifyError(error.message)));
-  ui.room.readyToggleBtn?.addEventListener("click", () => toggleReady().catch(error => notifyError(error.message)));
-  ui.room.startBattleBtn?.addEventListener("click", () => startBattle().catch(error => notifyError(error.message)));
-  ui.room.copyRoomCodeBtn?.addEventListener("click", async () => {
-    if (!state.currentRoomCode) {
-      notifyError("Сначала открой комнату.");
-      return;
-    }
-    await navigator.clipboard.writeText(state.currentRoomCode);
-    notify("Код комнаты скопирован.");
-  });
-
-  byId("groupModeSelect")?.addEventListener("change", event => {
-    setRoomMode(event.target.value).catch(error => notifyError(error.message));
-  });
-
-  ui.battle.attackActionBtn?.addEventListener("click", startAttackPlanning);
-  ui.battle.defendActionBtn?.addEventListener("click", () => {
-    submitBattleAction({ kind: "defend" }).catch(error => notifyError(error.message));
-  });
-  ui.battle.escapeActionBtn?.addEventListener("click", () => {
-    submitBattleAction({ kind: "escape" }).catch(error => notifyError(error.message));
-  });
-
-  ui.battle.sandAttackBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "sand" });
-  });
-  ui.battle.pawAttackBtn?.addEventListener("click", () => {
-    state.planningAttack.pendingType = "paw";
-    hide(ui.battle.attackMenu);
-    show(ui.battle.targetMenu);
-  });
-  ui.battle.tripAttackBtn?.addEventListener("click", () => {
-    commitPlannedAttackStep({ type: "trip" });
-  });
-  ui.battle.backToActionsBtn?.addEventListener("click", resetPlanningState);
-  ui.battle.backToAttackMenuBtn?.addEventListener("click", () => {
-    show(ui.battle.attackMenu);
-    hide(ui.battle.targetMenu);
-  });
-
-  ui.battle.faceTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "face" }));
-  ui.battle.frontLeftTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "frontLeft" }));
-  ui.battle.frontRightTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "frontRight" }));
-  ui.battle.sideTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "side" }));
-  ui.battle.earsTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "ears" }));
-  ui.battle.neckTargetBtn?.addEventListener("click", () => commitPlannedAttackStep({ type: "paw", targetKey: "neck" }));
-
-  ui.shell.openProfileBtn?.addEventListener("click", () => setScreen("profile"));
-  ui.shell.openRoomBtn?.addEventListener("click", () => setScreen("room"));
-  ui.shell.openHistoryBtn?.addEventListener("click", () => setScreen("history"));
-  ui.shell.openPublicProfilesBtn?.addEventListener("click", () => setScreen("publicProfiles"));
-  ui.shell.openAdminBtn?.addEventListener("click", () => setScreen("admin"));
-
-  ui.publicProfiles.searchBtn?.addEventListener("click", () => renderPublicProfilesList());
-  ui.publicProfiles.searchInput?.addEventListener("input", () => renderPublicProfilesList());
-
-  ui.admin.searchBtn?.addEventListener("click", renderAdmin);
-  ui.admin.searchInput?.addEventListener("input", renderAdmin);
-  ui.admin.refreshBtn?.addEventListener("click", () => {
-    refreshAdminCaches().then(renderAdmin).catch(error => notifyError(error.message));
-  });
+  // ... (оставь здесь все остальные addEventListener, которые у тебя были) ...
 
   ui.shell.themeSelect?.addEventListener("change", event => {
     applyTheme(event.target.value);
@@ -4929,8 +4866,6 @@ function bindStaticEvents() {
   });
 }
 
-// ... (тут идет весь твой остальной код) ...
-
 async function bootstrapApp() {
   injectGroupUi();
   injectSupplementalStyles();
@@ -4940,7 +4875,6 @@ async function bootstrapApp() {
   renderRoomIdleState();
   refreshShellChrome();
   
-  // Просто инициализируем мост и показываем экран входа
   try {
     await vkBridge.send('VKWebAppInit');
   } catch (e) {
@@ -4949,3 +4883,5 @@ async function bootstrapApp() {
   
   setScreen("auth");
 }
+
+bootstrapApp();
