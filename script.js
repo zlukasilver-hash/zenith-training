@@ -4939,6 +4939,8 @@ function bindStaticEvents() {
   });
 }
 
+// ... (тут идет весь твой остальной код) ...
+
 async function bootstrapApp() {
   injectGroupUi();
   injectSupplementalStyles();
@@ -4949,31 +4951,42 @@ async function bootstrapApp() {
   refreshShellChrome();
   setScreen("auth");
 
-  // Магия ВК: он сам передает ID пользователя при загрузке приложения
-  const urlParams = new URLSearchParams(window.location.search);
-  const vkUserId = urlParams.get('vk_user_id');
+  // Инициализация моста
+  try {
+    await vkBridge.send('VKWebAppInit');
+  } catch (e) {
+    console.error("Ошибка инициализации VK Bridge:", e);
+  }
 
-  if (vkUserId) {
-    try {
-      const fakeUser = { uid: "vk_" + vkUserId, email: "vk_" + vkUserId + "@vk.com" };
-      
-      // ВАЖНО: Сюда ТОЖЕ впиши свой ID ВКонтакте, чтобы у тебя работала админка!
-      if (String(vkUserId) === "ТВОЙ_ID_ВКОНТАКТЕ") {
+  // Сразу пытаемся получить данные пользователя при загрузке
+  try {
+    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+    if (vkUser && vkUser.id) {
+       const fakeUser = {
+         uid: "vk_" + vkUser.id,
+         email: "vk_" + vkUser.id + "@vk.com"
+       };
+       
+       // ВАЖНО: Вставь сюда свой цифровой ID ВКонтакте!
+       if (String(vkUser.id) === "155297005") {
          fakeUser.email = ADMIN_EMAIL;
-      }
+       }
 
-      await handleSignedInUser(fakeUser);
-      await tryAutoJoinSavedRoom();
-      renderProfile();
-      if (state.currentRoomCode) watchCurrentRoom();
-      setScreen("profile");
-    } catch (error) {
-      console.error(error);
-      notifyError("Не удалось загрузить профиль автоматически.");
+       await handleSignedInUser(fakeUser);
+       await tryAutoJoinSavedRoom();
+       renderProfile();
+       if (state.currentRoomCode) watchCurrentRoom();
+       setScreen("profile");
+    } else {
+       setScreen("auth");
     }
+  } catch (error) {
+    console.error("Ошибка входа через ВК:", error);
+    setScreen("auth");
   }
 }
 
+// Запускаем всё это дело
 bootstrapApp().catch(error => {
   console.error(error);
   notifyError(error.message || "Ошибка запуска.");
