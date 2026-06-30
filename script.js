@@ -4875,6 +4875,7 @@ async function bootstrapApp() {
   renderRoomIdleState();
   refreshShellChrome();
   
+  // Инициализация моста
   try {
     await vkBridge.send('VKWebAppInit');
   } catch (e) {
