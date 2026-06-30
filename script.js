@@ -37,7 +37,7 @@ let vkBridge = window.VKBridge;
 
 function loadVKBridge() {
   return new Promise((resolve, reject) => {
-    if (window.VKBridge) {
+    if (window.VKBridge && typeof window.VKBridge.send === 'function') {
       vkBridge = window.VKBridge;
       resolve(vkBridge);
       return;
@@ -45,8 +45,12 @@ function loadVKBridge() {
     const script = document.createElement('script');
     script.src = 'https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js';
     script.onload = () => {
-      vkBridge = window.VKBridge;
-      resolve(vkBridge);
+      if (window.VKBridge && typeof window.VKBridge.send === 'function') {
+        vkBridge = window.VKBridge;
+        resolve(vkBridge);
+      } else {
+        reject(new Error('VK Bridge загружен, но не инициализирован'));
+      }
     };
     script.onerror = () => reject(new Error('Не удалось загрузить VK Bridge'));
     document.head.appendChild(script);
@@ -1693,30 +1697,26 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-  // Если VK Bridge ещё не загружен – подгружаем
-  if (!vkBridge) {
     await loadVKBridge();
-    await vkBridge.send('VKWebAppInit');
-  }
-  const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
-  if (vkUser && vkUser.id) {
-    const fakeUser = {
-      uid: "vk_" + vkUser.id,
-      email: "vk_" + vkUser.id + "@vk.com"
-    };
-    if (String(vkUser.id) === "155297005") {
-      fakeUser.email = "zluka.silver@bk.ru";
+    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+    if (vkUser && vkUser.id) {
+      const fakeUser = {
+        uid: "vk_" + vkUser.id,
+        email: "vk_" + vkUser.id + "@vk.com"
+      };
+      if (String(vkUser.id) === "155297005") {
+        fakeUser.email = "zluka.silver@bk.ru";
+      }
+      await handleSignedInUser(fakeUser);
+      await tryAutoJoinSavedRoom();
+      renderProfile();
+      if (state.currentRoomCode) watchCurrentRoom();
+      setScreen("profile");
     }
-    await handleSignedInUser(fakeUser);
-    await tryAutoJoinSavedRoom();
-    renderProfile();
-    if (state.currentRoomCode) watchCurrentRoom();
-    setScreen("profile");
+  } catch (error) {
+    console.error("Ошибка входа:", error);
+    notifyError("ВК не ответил. Попробуйте еще раз.");
   }
-} catch (error) {
-  console.error("Ошибка входа:", error);
-  notifyError("ВК не ответил. Попробуйте еще раз.");
-}
 }
 
 async function handleLogout() {
@@ -4895,16 +4895,13 @@ async function bootstrapApp() {
   renderRoomIdleState();
   refreshShellChrome();
 
-  // Инициализация VK Bridge (если он ещё не загружен)
+  // Принудительно загружаем VK Bridge
   try {
-    if (!vkBridge) {
-      await loadVKBridge();
-    }
+    await loadVKBridge();
     await vkBridge.send('VKWebAppInit');
     console.log("VK Bridge инициализирован");
   } catch (e) {
     console.warn("Ошибка инициализации VK Bridge:", e);
-    // Можно продолжать, если мы не в VK (например, локальная разработка)
   }
 
   setScreen("auth");
