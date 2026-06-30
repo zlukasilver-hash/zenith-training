@@ -32,8 +32,6 @@ const firebaseConfig = {
   measurementId: "G-3TYXCHS8FG"
 };
 
-vkBridge.send('VKWebAppInit');
-
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
 const ROOM_RULES_VERSION = "room_rules_v4_group_2026_04_01";
@@ -1675,6 +1673,7 @@ async function handleRegister() {
 async function handleLogin() {
   try {
     // Запрашиваем данные профиля ВК (покажет окошко ВКонтакте)
+    await vkBridge.send('VKWebAppInit');
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
     
     const fakeUser = {
@@ -4942,6 +4941,11 @@ function bindStaticEvents() {
 // ... (тут идет весь твой остальной код) ...
 
 async function bootstrapApp() {
+  if (typeof vkBridge === 'undefined') {
+  console.error('VK Bridge не загружен!');
+  setScreen('auth');
+  return;
+}
   injectGroupUi();
   injectSupplementalStyles();
   ensureUiChrome();
