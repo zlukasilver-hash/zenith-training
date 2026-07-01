@@ -1672,15 +1672,12 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    // 1. Инициализация моста
+    // 1. Инициализация
     await vkBridge.send('VKWebAppInit');
     console.log('✅ VK Bridge инициализирован');
 
     // 2. Получаем данные пользователя (без токена)
-    // Запрашиваем базовые права (например, friends)
-await vkBridge.send('VKWebAppShowRequest', { scope: 'friends' });
-// Теперь получаем данные
-const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
     console.log('✅ Пользователь:', vkUser);
 
     // 3. Создаём fakeUser для Firebase
@@ -1714,8 +1711,12 @@ const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
 
   } catch (error) {
     console.error('❌ Ошибка входа:', error);
+
+    // Показываем понятное сообщение
     let userMessage = 'Ошибка входа: ';
-    if (error.message) {
+    if (error.error_data?.error_reason) {
+      userMessage += error.error_data.error_reason;
+    } else if (error.message) {
       userMessage += error.message;
     } else {
       userMessage += 'неизвестная ошибка. Подробности в консоли.';
