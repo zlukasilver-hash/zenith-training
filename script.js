@@ -4967,12 +4967,14 @@ function bindStaticEvents() {
 
 // ... (тут идет весь твой остальной код) ...
 
+// ... весь остальной код выше ...
+
 async function bootstrapApp() {
   if (typeof vkBridge === 'undefined') {
-  console.error('VK Bridge не загружен!');
-  setScreen('auth');
-  return;
-}
+    console.error('VK Bridge не загружен!');
+    setScreen('auth');
+    return;
+  }
   injectGroupUi();
   injectSupplementalStyles();
   ensureUiChrome();
@@ -4982,43 +4984,16 @@ async function bootstrapApp() {
   refreshShellChrome();
   setScreen("auth");
 
-  // Инициализация моста
   try {
     await vkBridge.send('VKWebAppInit');
+    console.log('✅ VK Bridge инициализирован');
   } catch (e) {
     console.error("Ошибка инициализации VK Bridge:", e);
   }
-
-  // Сразу пытаемся получить данные пользователя при загрузке
-  try {
-    const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
-    if (vkUser && vkUser.id) {
-       const fakeUser = {
-         uid: "vk_" + vkUser.id,
-         email: "vk_" + vkUser.id + "@vk.com"
-       };
-       
-       // ВАЖНО: Вставь сюда свой цифровой ID ВКонтакте!
-       if (String(vkUser.id) === "155297005") {
-         fakeUser.email = ADMIN_EMAIL;
-       }
-
-       await handleSignedInUser(fakeUser);
-       await tryAutoJoinSavedRoom();
-       renderProfile();
-       if (state.currentRoomCode) watchCurrentRoom();
-       setScreen("profile");
-    } else {
-       setScreen("auth");
-    }
-  } catch (error) {
-    console.error("Ошибка входа через ВК:", error);
-    setScreen("auth");
-  }
 }
 
-// Запускаем всё это дело
+// ЗАПУСК (это должно быть снаружи!)
 bootstrapApp().catch(error => {
-  console.error(error);
-  notifyError(error.message || "Ошибка запуска.");
+  console.error('Ошибка запуска приложения:', error);
+  notifyError('Ошибка запуска: ' + (error.message || 'неизвестная ошибка'));
 });
