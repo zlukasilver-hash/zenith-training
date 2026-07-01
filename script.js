@@ -1672,22 +1672,66 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    // 1. Инициализация
+    // 1. Инициализация моста
     await vkBridge.send('VKWebAppInit');
+    console.log('✅ VK Bridge инициализирован');
 
-    // 2. ЗАПРОС ПРАВ ДОСТУПА (вот здесь и происходит магия)
+    // 2. Запрашиваем токен с правами
+    // ВСТАВЬ СВОЙ APP_ID (цифры из адресной строки)
     const authResult = await vkBridge.send('VKWebAppGetAuthToken', {
-      app_id: 54660489, // <- ВАЖНО: вставьте сюда ID вашего приложения
-      scope: 'email'  // Запрашиваем доступ к email
+      app_id: 54660489, // ← ЗАМЕНИ НА СВОЙ APP_ID
+      scope: 'email'
     });
+    console.log('✅ Токен получен:', authResult);
 
-    // 3. Получение данных пользователя
+    // 3. Получаем данные пользователя
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
+    console.log('✅ Пользователь:', vkUser);
 
-    // ... остальной код без изменений ...
+    // 4. Вход в систему (без изменений)
+    const fakeUser = {
+      uid: "vk_" + vkUser.id,
+      email: "vk_" + vkUser.id + "@vk.com"
+    };
+    if (String(vkUser.id) === "155297005") {
+      fakeUser.email = ADMIN_EMAIL;
+    }
+    await handleSignedInUser(fakeUser);
+
+    if (state.userProfile && state.userProfile.displayName === "Зенит") {
+      await update(ref(db, getProfilePath(fakeUser.uid)), {
+        displayName: vkUser.first_name + " " + vkUser.last_name,
+        updatedAt: now()
+      });
+      state.userProfile.displayName = vkUser.first_name + " " + vkUser.last_name;
+    }
+
+    await tryAutoJoinSavedRoom();
+    renderProfile();
+    if (state.currentRoomCode) watchCurrentRoom();
+    setScreen("profile");
+
   } catch (error) {
-    console.error('Ошибка входа:', error);
-    notifyError('Ошибка: ' + (error.message || 'не удалось войти'));
+    // ========== ДЕТАЛЬНЫЙ ВЫВОД ОШИБКИ ==========
+    console.error('❌ Ошибка входа в ВК:');
+    console.error('Имя ошибки:', error.name);
+    console.error('Сообщение:', error.message);
+    console.error('Код ошибки:', error.code);
+    console.error('Полный объект:', error);
+    console.error('Строка ошибки:', JSON.stringify(error, null, 2));
+
+    // Показываем пользователю понятное сообщение
+    let userMessage = 'Ошибка входа: ';
+    if (error.message) {
+      userMessage += error.message;
+    } else if (error.code) {
+      userMessage += 'Код: ' + error.code;
+    } else {
+      userMessage += 'неизвестная ошибка. Подробности в консоли (F12).';
+    }
+    notifyError(userMessage);
+    // Дополнительно выводим в toast для наглядности:
+    toast('🔍 ' + userMessage + ' (смотри консоль F12)', 'danger');
   }
 }
 
