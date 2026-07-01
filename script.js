@@ -1672,39 +1672,22 @@ async function handleRegister() {
 
 async function handleLogin() {
   try {
-    // Запрашиваем данные профиля ВК (покажет окошко ВКонтакте)
+    // 1. Инициализация
     await vkBridge.send('VKWebAppInit');
+
+    // 2. ЗАПРОС ПРАВ ДОСТУПА (вот здесь и происходит магия)
+    const authResult = await vkBridge.send('VKWebAppGetAuthToken', {
+      app_id: 54660489, // <- ВАЖНО: вставьте сюда ID вашего приложения
+      scope: 'email'  // Запрашиваем доступ к email
+    });
+
+    // 3. Получение данных пользователя
     const vkUser = await vkBridge.send('VKWebAppGetUserInfo');
-    
-    const fakeUser = {
-      uid: "vk_" + vkUser.id,
-      email: "vk_" + vkUser.id + "@vk.com" 
-    };
-    
-    // ВАЖНО: Впиши сюда свой цифровой ID ВКонтакте, чтобы у тебя осталась админка!
-    if (String(vkUser.id) === "155297005") {
-      fakeUser.email = ADMIN_EMAIL;
-    }
 
-    await handleSignedInUser(fakeUser);
-    
-    // Если это новый профиль, красиво подставляем имя и фамилию из ВК
-    if (state.userProfile && state.userProfile.displayName === "Зенит") {
-       await update(ref(db, getProfilePath(fakeUser.uid)), {
-         displayName: vkUser.first_name + " " + vkUser.last_name,
-         updatedAt: now()
-       });
-       state.userProfile.displayName = vkUser.first_name + " " + vkUser.last_name;
-    }
-
-    await tryAutoJoinSavedRoom();
-    renderProfile();
-    if (state.currentRoomCode) watchCurrentRoom();
-    setScreen("profile");
-    
+    // ... остальной код без изменений ...
   } catch (error) {
-    notifyError("Ошибка: разрешите доступ к профилю ВК для входа.");
-    console.error(error);
+    console.error('Ошибка входа:', error);
+    notifyError('Ошибка: ' + (error.message || 'не удалось войти'));
   }
 }
 
