@@ -4203,10 +4203,10 @@ function renderCharacterCard(item) {
           <div class="character-card-name">${escapeHtml(character.name)}</div>
           <div class="character-card-meta">${escapeHtml(character.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(character.trainingStatus))}</div>
         </div>
-        <div class="character-card-badge">${pending > 0 ? \`Улучшений: \${pending}\` : "Без улучшений"}</div>
+        <div class="character-card-badge">${pending > 0 ? `Улучшений: ${pending}` : "Без улучшений"}</div>
       </div>
 
-      <div id="${statsContainerId}" class="character-stats-container">
+      <div id="${statsContainerId}" class="character-stats-container hidden">
         <div class="character-detail-block" style="margin-top:16px;">
           <div class="character-detail-title">Общая статистика</div>
           ${generalStats}
@@ -4246,8 +4246,8 @@ function renderCharacterCard(item) {
             <div class="character-detail-title">Улучшения</div>
             <div class="upgrade-chip-list">
               ${getCurrentUpgradePool(character).length
-                ? getCurrentUpgradePool(character).map(item => \`<span class="upgrade-chip">\${escapeHtml(item.label)}</span>\`).join("")
-                : \`<span class="empty-inline">Пока пусто</span>\`
+                ? getCurrentUpgradePool(character).map(up => `<span class="upgrade-chip">${escapeHtml(up.label)}</span>`).join("")
+                : `<span class="empty-inline">Пока пусто</span>`
               }
             </div>
           </div>
@@ -4255,11 +4255,11 @@ function renderCharacterCard(item) {
       </div>
 
       <div class="character-card-actions">
-        <button type="button" class="ghost-btn toggle-stats-btn" data-target="${statsContainerId}">Скрыть статы</button>
+        <button type="button" class="ghost-btn toggle-stats-btn" data-target="${statsContainerId}">Показать статы</button>
         <button type="button" class="secondary-btn character-edit-btn" data-char-id="${escapeHtml(item.id)}">Редактировать</button>
         <button type="button" class="ghost-btn ghost-btn-danger character-delete-btn" data-char-id="${escapeHtml(item.id)}">Удалить</button>
         <button type="button" class="primary-btn character-upgrade-btn" data-char-id="${escapeHtml(item.id)}" ${pending > 0 ? "" : "disabled"}>Выбрать улучшение</button>
-        ${isApprentice ? \`<button type="button" class="ghost-btn character-promote-btn" data-char-id="\${escapeHtml(item.id)}">Посвятить в воители</button>\` : \`<span></span>\`}
+        ${isApprentice ? `<button type="button" class="ghost-btn character-promote-btn" data-char-id="${escapeHtml(item.id)}">Посвятить в воители</button>` : `<span></span>`}
       </div>
     </div>
   `;
@@ -4307,6 +4307,7 @@ function renderProfile() {
       `
   );
 
+  // Обработчик для нашей новой кнопки
   ui.profile.charactersList.querySelectorAll(".toggle-stats-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const targetId = btn.dataset.target;
