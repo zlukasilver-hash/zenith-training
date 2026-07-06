@@ -3136,6 +3136,12 @@ function startAttackPlanning() {
     return;
   }
 
+  // Наша новая проверка на оглушение
+  if (actor.effects.stunTurns > 0) {
+    submitBattleAction({ kind: "skip" }).catch(error => notifyError(error.message));
+    return;
+  }
+
   if (battle.queuedActions?.[actorUid]) {
     notifyError("Вы уже выбрали действие этого раунда.");
     return;
@@ -3316,10 +3322,12 @@ function setBattleLog(logItems) {
     return;
   }
 
-  html(ui.battle.log, items.map((item, index) => {
+  const reversedItems = [...items].reverse();
+
+  html(ui.battle.log, reversedItems.map((item, index) => {
     const isHtml = String(item).trim().startsWith("<");
     return `
-      <div class="battle-log-entry ${index === items.length - 1 ? "battle-log-entry-latest" : ""}">
+      <div class="battle-log-entry ${index === 0 ? "battle-log-entry-latest" : ""}">
         <div class="battle-log-mark">✦</div>
         <div class="battle-log-text">${isHtml ? item : escapeHtml(item)}</div>
       </div>
@@ -3388,7 +3396,18 @@ function renderBattleForPlayer(room, battle) {
     return;
   }
 
-  setBattleButtonsDisabled(false, defendDisabled);
+  // Наша новая логика для кнопок
+  const isStunned = myFighter && myFighter.effects.stunTurns > 0;
+
+  if (isStunned) {
+    text(ui.battle.attackActionBtn, "Пропустить ход (Оглушён)");
+    disable(ui.battle.defendActionBtn, true);
+    disable(ui.battle.escapeActionBtn, true);
+  } else {
+    text(ui.battle.attackActionBtn, "Напасть");
+    setBattleButtonsDisabled(false, defendDisabled);
+  }
+
   if (!state.planningAttack) showBattleMainActions();
   updatePlanningBadge();
 }
@@ -4019,14 +4038,47 @@ function applyBattleOutcomeToCharacter({
 
 async function saveFinishedMatchIfNeeded(roomCode, room) {
   if (!room || room.status !== "finished") return;
-  if (room.matchId && !isClaimToken(room.matchId)) return;
   if (state.pendingMatchSaveRooms.has(roomCode)) return;
 
   state.pendingMatchSaveRooms.add(roomCode);
 
   try {
-    let claimToken = room.matchId || "";
+    const preview = await getCreditPreviewForRoom(room);
+    const battle = room.battle ? normalizeBattle(room.battle) : null;
+    const participants = getParticipantsArray(room);
+    const finishedAt = battle?.completedAt || room.finishInfo?.completedAt || now();
 
+    const myParticipants = participants.filter(p => p.uid === state.user?.uid);
+    const localMatchId = room.matchId || `${roomCode}_${finishedAt}`;
+
+    for (const participant of myParticipants) {
+      const enemyNames = participants
+        .filter(other => isEnemyParticipant(room.modeId, participant, other))
+        .map(other => other.characterName)
+        .join(", ");
+
+      await runTransaction(ref(db, getCharacterPath(participant.uid, participant.characterId)), rawCharacter => {
+        if (!rawCharacter) return rawCharacter;
+        return applyBattleOutcomeToCharacter({
+          character: rawCharacter,
+          resultType: getParticipantResult(room, participant.uid),
+          opponentName: enemyNames,
+          finishedAt,
+          creditGranted: Boolean(preview.eligibleByParticipant?.[participant.uid]?.getsCredit),
+          creditReason: preview.eligibleByParticipant?.[participant.uid]?.reason || preview.reason,
+          analyticsDelta: battle?.fighters?.[participant.uid]?.analytics || createBattleAnalyticsBlock(),
+          matchId: localMatchId
+        });
+      });
+    }
+
+    if (myParticipants.length) {
+      await loadOwnCharacters();
+      renderProfile();
+      loadAndRenderHistory().catch(console.error);
+    }
+
+    let claimToken = room.matchId || "";
     if (claimToken) {
       if (!isClaimToken(claimToken) || !isOwnClaimToken(claimToken)) return;
     } else {
@@ -4037,12 +4089,10 @@ async function saveFinishedMatchIfNeeded(roomCode, room) {
 
     const latestRoomSnap = await get(ref(db, getRoomPath(roomCode)));
     if (!latestRoomSnap.exists()) return;
-
     const latestRoom = normalizeRoom(latestRoomSnap.val());
     if (latestRoom.matchId !== claimToken) return;
     if (!isOwnClaimToken(latestRoom.matchId)) return;
 
-    const preview = await getCreditPreviewForRoom(latestRoom);
     const historyRef = push(ref(db, "trainingHistory"));
     const matchPayload = createHistoryRecordPayload(roomCode, latestRoom, preview);
     await set(historyRef, matchPayload);
@@ -4051,32 +4101,6 @@ async function saveFinishedMatchIfNeeded(roomCode, room) {
       matchId: historyRef.key,
       creditPreview: preview
     });
-
-    const finishedAt = matchPayload.finishedAt;
-    const battle = latestRoom.battle ? normalizeBattle(latestRoom.battle) : null;
-    const participants = getParticipantsArray(latestRoom);
-
-    for (const participant of participants) {
-      const enemyNames = participants
-        .filter(other => isEnemyParticipant(latestRoom.modeId, participant, other))
-        .map(other => other.characterName)
-        .join(", ");
-
-      await runTransaction(ref(db, getCharacterPath(participant.uid, participant.characterId)), rawCharacter => {
-        if (!rawCharacter) return rawCharacter;
-
-        return applyBattleOutcomeToCharacter({
-          character: rawCharacter,
-          resultType: getParticipantResult(latestRoom, participant.uid),
-          opponentName: enemyNames,
-          finishedAt,
-          creditGranted: Boolean(preview.eligibleByParticipant?.[participant.uid]?.getsCredit),
-          creditReason: preview.eligibleByParticipant?.[participant.uid]?.reason || preview.reason,
-          analyticsDelta: battle?.fighters?.[participant.uid]?.analytics || createBattleAnalyticsBlock(),
-          matchId: historyRef.key
-        });
-      });
-    }
 
     if (battle && battle.finishReason !== "timeout_unfinished") {
       for (let i = 0; i < participants.length; i += 1) {
@@ -4109,12 +4133,6 @@ async function saveFinishedMatchIfNeeded(roomCode, room) {
           characterNames: creditedNames
         });
       }
-    }
-
-    if (participants.some(item => item.uid === state.user?.uid)) {
-      await loadOwnCharacters();
-      renderProfile();
-      loadAndRenderHistory().catch(console.error);
     }
   } finally {
     state.pendingMatchSaveRooms.delete(roomCode);
@@ -4176,6 +4194,8 @@ function renderCharacterCard(item) {
     </div>
   `;
 
+  const statsContainerId = `stats_${item.id}`;
+
   return `
     <div class="character-card ${styleClass}">
       <div class="character-card-top">
@@ -4183,60 +4203,63 @@ function renderCharacterCard(item) {
           <div class="character-card-name">${escapeHtml(character.name)}</div>
           <div class="character-card-meta">${escapeHtml(character.clan || "Без племени")} · ${escapeHtml(getTrainingStatusLabel(character.trainingStatus))}</div>
         </div>
-        <div class="character-card-badge">${pending > 0 ? `Улучшений: ${pending}` : "Без улучшений"}</div>
+        <div class="character-card-badge">${pending > 0 ? \`Улучшений: \${pending}\` : "Без улучшений"}</div>
       </div>
 
-      <div class="character-detail-block">
-        <div class="character-detail-title">Общая статистика</div>
-        ${generalStats}
-      </div>
-
-      <div class="character-detail-block" style="margin-top:12px;">
-        <div class="character-detail-title">Зачётная статистика</div>
-        ${creditStats}
-      </div>
-
-      <div class="character-upgrades-wrap">
-        <div class="character-upgrades-block">
-          <div class="character-detail-title">Текущий прогресс</div>
-          <div class="character-progress-line">Победы до улучшения: ${progress.winsTowardUpgrade}</div>
-          <div class="character-progress-line">Поражения до улучшения: ${progress.lossesTowardUpgrade}</div>
-          <div class="character-progress-line">Незавершённые: ${progress.unfinishedTrainings}</div>
-          <div class="character-progress-line">Без зачёта: ${progress.deniedTrainings}</div>
+      <div id="${statsContainerId}" class="character-stats-container">
+        <div class="character-detail-block" style="margin-top:16px;">
+          <div class="character-detail-title">Общая статистика</div>
+          ${generalStats}
         </div>
 
-        <div class="character-upgrades-block">
-          <div class="character-detail-title">Боевые параметры</div>
-          <div class="character-progress-line">Точность: ${combat.accuracy}%</div>
-          <div class="character-progress-line">Уворот: ${combat.dodge}%</div>
-          <div class="character-progress-line">Сила лапы: ${combat.clawPower}%</div>
-          <div class="character-progress-line">Сила подсечки: ${combat.bitePower}%</div>
-        </div>
-      </div>
-
-      <div class="character-upgrades-wrap">
-        <div class="character-upgrades-block">
-          <div class="character-detail-title">Излюбленный приём</div>
-          <div class="character-progress-line">${escapeHtml(getFavoriteMoveLabel(character))}</div>
-          <div class="character-progress-line">Точность попаданий: ${getAccuracyPercent(character)}%</div>
+        <div class="character-detail-block" style="margin-top:12px;">
+          <div class="character-detail-title">Зачётная статистика</div>
+          ${creditStats}
         </div>
 
-        <div class="character-upgrades-block">
-          <div class="character-detail-title">Улучшения</div>
-          <div class="upgrade-chip-list">
-            ${getCurrentUpgradePool(character).length
-              ? getCurrentUpgradePool(character).map(item => `<span class="upgrade-chip">${escapeHtml(item.label)}</span>`).join("")
-              : `<span class="empty-inline">Пока пусто</span>`
-            }
+        <div class="character-upgrades-wrap">
+          <div class="character-upgrades-block">
+            <div class="character-detail-title">Текущий прогресс</div>
+            <div class="character-progress-line">Победы до улучшения: ${progress.winsTowardUpgrade}</div>
+            <div class="character-progress-line">Поражения до улучшения: ${progress.lossesTowardUpgrade}</div>
+            <div class="character-progress-line">Незавершённые: ${progress.unfinishedTrainings}</div>
+            <div class="character-progress-line">Без зачёта: ${progress.deniedTrainings}</div>
+          </div>
+
+          <div class="character-upgrades-block">
+            <div class="character-detail-title">Боевые параметры</div>
+            <div class="character-progress-line">Точность: ${combat.accuracy}%</div>
+            <div class="character-progress-line">Уворот: ${combat.dodge}%</div>
+            <div class="character-progress-line">Сила лапы: ${combat.clawPower}%</div>
+            <div class="character-progress-line">Сила подсечки: ${combat.bitePower}%</div>
+          </div>
+        </div>
+
+        <div class="character-upgrades-wrap">
+          <div class="character-upgrades-block">
+            <div class="character-detail-title">Излюбленный приём</div>
+            <div class="character-progress-line">${escapeHtml(getFavoriteMoveLabel(character))}</div>
+            <div class="character-progress-line">Точность попаданий: ${getAccuracyPercent(character)}%</div>
+          </div>
+
+          <div class="character-upgrades-block">
+            <div class="character-detail-title">Улучшения</div>
+            <div class="upgrade-chip-list">
+              ${getCurrentUpgradePool(character).length
+                ? getCurrentUpgradePool(character).map(item => \`<span class="upgrade-chip">\${escapeHtml(item.label)}</span>\`).join("")
+                : \`<span class="empty-inline">Пока пусто</span>\`
+              }
+            </div>
           </div>
         </div>
       </div>
 
       <div class="character-card-actions">
+        <button type="button" class="ghost-btn toggle-stats-btn" data-target="${statsContainerId}">Скрыть статы</button>
         <button type="button" class="secondary-btn character-edit-btn" data-char-id="${escapeHtml(item.id)}">Редактировать</button>
         <button type="button" class="ghost-btn ghost-btn-danger character-delete-btn" data-char-id="${escapeHtml(item.id)}">Удалить</button>
         <button type="button" class="primary-btn character-upgrade-btn" data-char-id="${escapeHtml(item.id)}" ${pending > 0 ? "" : "disabled"}>Выбрать улучшение</button>
-        ${isApprentice ? `<button type="button" class="ghost-btn character-promote-btn" data-char-id="${escapeHtml(item.id)}">Посвятить в воители</button>` : `<span></span>`}
+        ${isApprentice ? \`<button type="button" class="ghost-btn character-promote-btn" data-char-id="\${escapeHtml(item.id)}">Посвятить в воители</button>\` : \`<span></span>\`}
       </div>
     </div>
   `;
@@ -4283,6 +4306,17 @@ function renderProfile() {
         </div>
       `
   );
+
+  ui.profile.charactersList.querySelectorAll(".toggle-stats-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.target;
+      const statsBlock = document.getElementById(targetId);
+      if (statsBlock) {
+        statsBlock.classList.toggle("hidden");
+        btn.textContent = statsBlock.classList.contains("hidden") ? "Показать статы" : "Скрыть статы";
+      }
+    });
+  });
 
   ui.profile.charactersList.querySelectorAll(".character-edit-btn").forEach(btn => {
     btn.addEventListener("click", () => editCharacter(btn.dataset.charId).catch(error => notifyError(error.message)));
