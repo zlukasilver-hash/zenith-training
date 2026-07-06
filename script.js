@@ -3277,7 +3277,13 @@ function getDodgeSymbols(left) {
   const safeLeft = clamp(left || 0, 0, MAX_DODGES);
   let result = "";
   for (let i = 0; i < MAX_DODGES; i += 1) {
-    result += i < safeLeft ? "✦" : "✧";
+    if (i < safeLeft) {
+      // Активный уворот: яркий
+      result += `<span style="color: var(--accent-3);">✦</span>`;
+    } else {
+      // Потраченный уворот: тусклый и полупрозрачный
+      result += `<span style="color: var(--muted); opacity: 0.3;">✦</span>`;
+    }
   }
   return result;
 }
@@ -3292,7 +3298,7 @@ function renderMyBattleEffects(fighter) {
     <div class="battle-effects-grid">
       <div class="battle-effect-chip">
         <span class="battle-effect-chip-label">Увороты</span>
-        <strong>${escapeHtml(getDodgeSymbols(fighter.effects.dodgesLeft))}</strong>
+        <strong>${getDodgeSymbols(fighter.effects.dodgesLeft)}</strong>
       </div>
       <div class="battle-effect-chip">
         <span class="battle-effect-chip-label">Потеря очков спарринга</span>
@@ -3397,15 +3403,19 @@ function renderBattleForPlayer(room, battle) {
   }
 
   // Наша новая логика для кнопок
+  // Наша новая логика для кнопок
   const isStunned = myFighter && myFighter.effects.stunTurns > 0;
+
+  // Сначала снимаем старую блокировку со всех кнопок
+  setBattleButtonsDisabled(false, defendDisabled);
 
   if (isStunned) {
     text(ui.battle.attackActionBtn, "Пропустить ход (Оглушён)");
+    // Принудительно выключаем защиту и побег, но оставляем кнопку пропуска активной
     disable(ui.battle.defendActionBtn, true);
     disable(ui.battle.escapeActionBtn, true);
   } else {
     text(ui.battle.attackActionBtn, "Напасть");
-    setBattleButtonsDisabled(false, defendDisabled);
   }
 
   if (!state.planningAttack) showBattleMainActions();
