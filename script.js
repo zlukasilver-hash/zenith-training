@@ -2062,48 +2062,69 @@ async function joinRoom() {
   if (!participant) { notifyError("Сначала выбери активного персонажа в профиле."); return; }
 
   const roomRef = ref(db, getRoomPath(roomCode));
-  const snapshot = await get(roomRef);
-  if (!snapshot.exists()) { notifyError("Комната не найдена."); return; }
-  const original = normalizeRoom(snapshot.val());
-  if (!original.participants[state.user.uid]) {
-    const result = await runTransaction(roomRef, raw => {
-      if (!raw) return;
-      const room = normalizeRoom(raw);
-      if (!["waiting", "ready"].includes(room.status)) return;
-      if (room.participants[state.user.uid]) return room;
-      if (getParticipantKeys(room).length >= ROOM_SOFT_LIMIT) return;
-      const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
-      const counts = getSideCounts(room);
-      let side = mode.type === "ffa" ? "solo" : (counts.A <= counts.B ? "A" : "B");
-      if (room.purpose === "exam" && ["team_2v1", "team_3v1"].includes(room.modeId)) {
-        const members = getParticipantsArray(room);
-        const warrior = members.find(p => p.trainingStatus !== "apprentice");
-        const apprentice = members.find(p => p.trainingStatus === "apprentice");
-        if (participant.trainingStatus === "apprentice") {
-          side = warrior ? (warrior.side === "A" ? "B" : "A") : (apprentice?.side || "A");
-        } else {
-          side = apprentice ? (apprentice.side === "A" ? "B" : "A") : "A";
-        }
-      }
-      room.participants[state.user.uid] = { ...participant, side };
-      room.readyMap = Object.fromEntries(Object.keys(room.participants).map(uid => [uid, false]));
-      room.readyDeadlineAt = 0;
-      room.status = getParticipantKeys(room).length > 1 ? "ready" : "waiting";
-      room.creditPreview = null;
-      return room;
-    });
-    if (!result.committed) {
-      notifyError("Комната уже запущена, завершена или заполнена. Можно вернуться только к своему бою.");
-      return;
-    }
-  }
 
-  state.currentRoomCode = roomCode;
-  state.currentParticipantKey = state.user.uid;
-  saveActiveRoomLocal(roomCode);
-  watchCurrentRoom();
-  setScreen("room");
-  notify(original.participants[state.user.uid] ? `Вы вернулись в комнату ${roomCode}.` : `Вы вошли в комнату ${roomCode}.`);
+  // RTDB transactions can initially receive null for a room that exists on the
+  // server but is not yet in this player's local cache. Returning undefined in
+  // that situation aborts the transaction before Firebase fetches the room.
+  // Keep a live listener until the transaction finishes so its initial server
+  // snapshot is available locally. Unlike a plain get(), this primes the
+  // transaction's local view; it does not write anything to the database.
+  let unsubscribeJoinSnapshot = null;
+  try {
+    const snapshot = await new Promise((resolve, reject) => {
+      let received = false;
+      unsubscribeJoinSnapshot = onValue(roomRef, snap => {
+        if (!received) { received = true; resolve(snap); }
+      }, reject);
+    });
+    if (!snapshot.exists()) { notifyError("Комната не найдена."); return; }
+    const original = normalizeRoom(snapshot.val());
+    if (!original.participants[state.user.uid]) {
+      const result = await runTransaction(roomRef, raw => {
+        if (!raw) return; // A genuinely removed room must not be recreated.
+        const room = normalizeRoom(raw);
+        if (!["waiting", "ready"].includes(room.status)) return;
+        if (room.participants[state.user.uid]) return room;
+        if (getParticipantKeys(room).length >= ROOM_SOFT_LIMIT) return;
+        const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
+        const counts = getSideCounts(room);
+        let side = mode.type === "ffa" ? "solo" : (counts.A <= counts.B ? "A" : "B");
+        if (room.purpose === "exam" && ["team_2v1", "team_3v1"].includes(room.modeId)) {
+          const members = getParticipantsArray(room);
+          const warrior = members.find(p => p.trainingStatus !== "apprentice");
+          const apprentice = members.find(p => p.trainingStatus === "apprentice");
+          if (participant.trainingStatus === "apprentice") {
+            side = warrior ? (warrior.side === "A" ? "B" : "A") : (apprentice?.side || "A");
+          } else {
+            side = apprentice ? (apprentice.side === "A" ? "B" : "A") : "A";
+          }
+        }
+        room.participants[state.user.uid] = { ...participant, side };
+        room.readyMap = Object.fromEntries(Object.keys(room.participants).map(uid => [uid, false]));
+        room.readyDeadlineAt = 0;
+        room.status = getParticipantKeys(room).length > 1 ? "ready" : "waiting";
+        room.creditPreview = null;
+        return room;
+      });
+      if (!result.committed) {
+        const latest = result.snapshot?.exists() ? normalizeRoom(result.snapshot.val()) : null;
+        if (!latest) notifyError("Комната уже удалена. Попроси новый код.");
+        else if (!["waiting", "ready"].includes(latest.status)) notifyError("Тренировка уже началась или завершилась.");
+        else if (getParticipantKeys(latest).length >= ROOM_SOFT_LIMIT) notifyError("Комната заполнена: максимум шесть игроков.");
+        else notifyError("Не удалось войти в комнату. Попробуй ещё раз.");
+        return;
+      }
+    }
+
+    state.currentRoomCode = roomCode;
+    state.currentParticipantKey = state.user.uid;
+    saveActiveRoomLocal(roomCode);
+    watchCurrentRoom();
+    setScreen("room");
+    notify(original.participants[state.user.uid] ? `Вы вернулись в комнату ${roomCode}.` : `Вы вошли в комнату ${roomCode}.`);
+  } finally {
+    if (typeof unsubscribeJoinSnapshot === "function") unsubscribeJoinSnapshot();
+  }
 }
 
 async function tryAutoJoinSavedRoom() {
