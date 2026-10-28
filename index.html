@@ -4,9 +4,10 @@
   <meta charset="UTF-8" />
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   />
   <title>ZENITH RP — Тренировки</title>
+  <meta name="theme-color" content="#0b0b10" />
   <meta
     name="description"
     content="Система тренировок для полу-ролевой Зенит."
@@ -15,7 +16,7 @@
 </head>
 <body data-theme="crimsonNight" data-card-style="smooth">
   <div class="site-shell">
-    <div class="background-decor">
+    <div class="background-decor" aria-hidden="true">
       <span class="decor-star decor-star-1">✦</span>
       <span class="decor-star decor-star-2">✶</span>
       <span class="decor-star decor-star-3">✦</span>
@@ -45,7 +46,7 @@
         </h1>
 
         <p class="hero-text">
-          Сайт полуролевой «Зенит» для удобства в тренировках, комнатах и боевых зачётах.
+          Место, где проверяют силы, оттачивают приёмы и помнят каждую победу. Тренировки племён начинаются здесь.
         </p>
       </div>
     </header>
@@ -57,7 +58,7 @@
       </div>
     </section>
 
-    <nav class="top-nav">
+    <nav class="top-nav" aria-label="Основная навигация">
       <div class="top-nav-left">
         <div id="currentUserBadge" class="current-user-badge">✦ Гость ✦</div>
         <div id="globalNotice" class="global-notice">Добро пожаловать.</div>
@@ -354,10 +355,19 @@
               </div>
 
               <label class="field-block">
-                <span class="field-label">Режим тренировки</span>
+                <span class="field-label">Тип встречи</span>
+                <select id="roomPurposeSelect" class="field-select">
+                  <option value="training">Обычная тренировка</option>
+                  <option value="exam">Воинское испытание</option>
+                </select>
+              </label>
+              <div id="examModeTip" class="exam-mode-tip hidden">Испытание оценивает боевое мастерство, стойкость и тактику каждого оруженосца. Победа не обязательна. Уже засчитанные тренировки помогают сдать экзамен. Во время испытания обычные зачёты и улучшения не начисляются.</div>
+              <label class="field-block">
+                <span class="field-label">Формат сражения</span>
                 <select id="groupModeSelect" class="field-select">
                   <option value="duel">1 на 1</option>
                   <option value="team_2v1">2 на 1</option>
+                  <option value="team_3v1" hidden disabled>3 на 1</option>
                   <option value="team_2v2">2 на 2</option>
                   <option value="team_3v2">3 на 2</option>
                   <option value="team_3v3">3 на 3</option>
@@ -419,7 +429,7 @@
             <div class="room-card room-credit-card">
               <div class="card-title-row">
                 <span class="card-title-mark">✦</span>
-                <h3 class="card-title-text">Зачёт тренировки</h3>
+                <h3 id="roomCreditTitle" class="card-title-text">Зачёт тренировки</h3>
               </div>
 
               <div id="trainingCreditBadge" class="training-credit-badge">

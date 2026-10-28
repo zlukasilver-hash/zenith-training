@@ -34,7 +34,7 @@ const firebaseConfig = {
 
 const ADMIN_EMAIL = "zluka.silver@bk.ru";
 const MOSCOW_TIMEZONE = "Europe/Moscow";
-const ROOM_RULES_VERSION = "room_rules_v4_group_2026_04_01";
+const ROOM_RULES_VERSION = "room_rules_v5_exam_2026_10_28";
 
 const ROOM_CODE_LENGTH = 6;
 const MAX_LOG_ITEMS = 80;
@@ -183,6 +183,16 @@ const GROUP_MODES = {
     mirrored: true,
     maxPlayers: 3,
     description: "Двое против одного. Больше двух на одного здесь не бывает."
+  },
+  team_3v1: {
+    id: "team_3v1",
+    label: "3 на 1",
+    type: "team",
+    sideOptions: ["A", "B"],
+    exactSides: { A: 3, B: 1 },
+    mirrored: true,
+    maxPlayers: 4,
+    description: "Трое оруженосцев против одного воителя. Только для итогового испытания."
   },
   team_2v2: {
     id: "team_2v2",
@@ -360,6 +370,10 @@ const state = {
   adminRoomsCache: {},
   adminMatchesCache: {},
   roomTimerInterval: null,
+  roomTimerDeadline: 0,
+  roomTimerExpiring: false,
+  creditPreviewRequestKey: "",
+  activeRoomWatchCode: "",
   modalResolver: null,
   modalSerializer: null,
   modalRoot: null,
@@ -372,7 +386,9 @@ const state = {
   shownRulesByRoom: {},
   planningAttack: null,
   currentRoomSnapshot: null,
-  pendingMatchSaveRooms: new Set()
+  pendingMatchSaveRooms: new Set(),
+  completedMatchSaves: new Set(),
+  selectedAdminUserId: ""
 };
 
 function now() {
@@ -690,7 +706,8 @@ function createDefaultTrainingProgress() {
 unfinishedTrainings: 0,
 deniedTrainings: 0,
 lastProcessedMatchId: "",
-lastProcessedMatchAt: 0
+lastProcessedMatchAt: 0,
+processedMatchIds: {}
   };
 }
 
@@ -700,6 +717,7 @@ function createDefaultTrainingProfile() {
     warriorUpgrades: [],
     apprenticeUpgrades: [],
     upgradeHistory: [],
+    exams: { attempts: 0, passed: 0, failed: 0, latest: null, records: {} },
     analytics: {
       favoriteMoveCounters: createDefaultFavoriteCounters(),
       accuracy: createDefaultAccuracyStats(),
@@ -775,7 +793,8 @@ function normalizeTrainingProgress(raw) {
 unfinishedTrainings: raw?.unfinishedTrainings ?? base.unfinishedTrainings,
 deniedTrainings: raw?.deniedTrainings ?? base.deniedTrainings,
 lastProcessedMatchId: raw?.lastProcessedMatchId ?? base.lastProcessedMatchId,
-lastProcessedMatchAt: raw?.lastProcessedMatchAt ?? base.lastProcessedMatchAt
+lastProcessedMatchAt: raw?.lastProcessedMatchAt ?? base.lastProcessedMatchAt,
+processedMatchIds: raw?.processedMatchIds && typeof raw.processedMatchIds === "object" ? raw.processedMatchIds : {}
   };
 }
 
@@ -786,6 +805,13 @@ function normalizeTrainingProfile(raw) {
     warriorUpgrades: safeArray(raw?.warriorUpgrades),
     apprenticeUpgrades: safeArray(raw?.apprenticeUpgrades),
     upgradeHistory: safeArray(raw?.upgradeHistory),
+    exams: {
+      attempts: Number(raw?.exams?.attempts || 0),
+      passed: Number(raw?.exams?.passed || 0),
+      failed: Number(raw?.exams?.failed || 0),
+      latest: raw?.exams?.latest || null,
+      records: raw?.exams?.records && typeof raw.exams.records === "object" ? raw.exams.records : {}
+    },
     analytics: {
       favoriteMoveCounters: { ...base.analytics.favoriteMoveCounters, ...(raw?.analytics?.favoriteMoveCounters || {}) },
       accuracy: { ...base.analytics.accuracy, ...(raw?.analytics?.accuracy || {}) },
@@ -862,6 +888,7 @@ function normalizeBattleFighter(raw) {
     trainingStatus: raw?.trainingStatus || "warrior",
     side: raw?.side || "A",
     combat: normalizeCombatBase(raw?.combat),
+    examPrepCredits: Number(raw?.examPrepCredits || 0),
     hp: raw?.hp ?? 100,
     alive: raw?.alive !== false,
     escaped: Boolean(raw?.escaped),
@@ -880,6 +907,8 @@ function normalizeBattle(raw) {
   );
   return {
     modeId: raw?.modeId || "duel",
+    examJournal: raw?.examJournal && typeof raw.examJournal === "object" ? raw.examJournal : {},
+    purpose: raw?.purpose === "exam" ? "exam" : "training",
     startedAt: raw?.startedAt ?? 0,
     completedAt: raw?.completedAt ?? 0,
     lastActionAt: raw?.lastActionAt ?? 0,
@@ -905,6 +934,7 @@ function createDefaultRoom(code, participant) {
     code,
     status: "waiting",
     modeId: "duel",
+    purpose: "training",
     createdAt: now(),
     createdBy: participant.uid,
     participants: {
@@ -913,6 +943,7 @@ function createDefaultRoom(code, participant) {
     readyMap: {
       [participant.uid]: false
     },
+    readyDeadlineAt: 0,
     battle: null,
     finishInfo: null,
     matchId: "",
@@ -946,13 +977,16 @@ function normalizeRoom(raw) {
     code: raw?.code || "",
     status: raw?.status || "waiting",
     modeId: raw?.modeId || "duel",
+    purpose: raw?.purpose === "exam" ? "exam" : "training",
     createdAt: raw?.createdAt ?? now(),
     createdBy: raw?.createdBy || "",
     participants,
     readyMap: raw?.readyMap || {},
+    readyDeadlineAt: raw?.readyDeadlineAt || 0,
     battle: raw?.battle ? normalizeBattle(raw.battle) : null,
     finishInfo: raw?.finishInfo || null,
     matchId: raw?.matchId || "",
+    resultsSavedBy: raw?.resultsSavedBy || {},
     creditPreview: raw?.creditPreview || {
       badge: "Зачёта не будет",
       reason: "Сначала собери корректный состав комнаты.",
@@ -1286,7 +1320,8 @@ function getRoomRulesHtml() {
   return `
     <div class="room-rules-sheet">
       <div class="room-rules-section">
-        <div class="room-rules-title">Теперь в комнате можно до шести игроков</div>
+        <div class="room-rules-title">Тренировки и воинские испытания</div>
+        <p>Итоговое испытание не начисляет обычные победы, зачёты или улучшения. Оно оценивает три направления: боевое мастерство, стойкость и тактику. Для сдачи необходимо 7 баллов с учётом подготовки и хотя бы 1 балл в каждом направлении. За 1–2 зачётные тренировки оруженосец получает +1, за 3 и более — +2 к оценке, а не к шансам попадания.</p>
         <ul>
           <li>доступны форматы 1 на 1, 2 на 1, 2 на 2, 3 на 2, 3 на 3 и каждый сам за себя на троих;</li>
           <li>в командных режимах один персонаж может за свой ход назначить удары всем живым противникам по очереди;</li>
@@ -1602,6 +1637,10 @@ async function promoteApprenticeToWarrior(characterId) {
     ...transferred.map(item => ({ ...item, sourceStatus: "apprentice" }))
   ];
   next.training.apprenticeUpgrades = [];
+  // No unspent apprentice upgrades or partial progress bypass the transfer cap.
+  next.training.progress.pendingUpgradePoints = 0;
+  next.training.progress.winsTowardUpgrade = 0;
+  next.training.progress.lossesTowardUpgrade = 0;
   next.training.promotion.canTransferNow = false;
   next.training.promotion.transferredAt = now();
   next.training.promotion.transferredCount = transferred.length;
@@ -1726,6 +1765,7 @@ async function handleLogin() {
 }
 
 async function handleLogout() {
+  cleanupRoomWatcher();
   clearActiveRoomLocal();
   state.currentRoomCode = "";
   state.currentParticipantKey = "";
@@ -1820,11 +1860,61 @@ function normalizeSidesForMode(room) {
   return next;
 }
 
+
+const EXAM_MODES = new Set(["duel", "team_2v1", "team_3v1", "team_2v2", "team_3v3"]);
+function allowedModeForPurpose(modeId, purpose) {
+  return purpose === "exam" ? EXAM_MODES.has(modeId) : Boolean(GROUP_MODES[modeId]) && modeId !== "team_3v1";
+}
+function examPreparationBonus(creditedTrainings) {
+  return creditedTrainings >= 3 ? 2 : creditedTrainings >= 1 ? 1 : 0;
+}
+function examCreditPreview() {
+  return { badge: "Воинское испытание", reason: "Результат экзамена учитывается отдельно от обычной статистики. Побеждать необязательно.", eligibleByParticipant: {} };
+}
+function updatePurposeControls(room) {
+  const purpose = room ? (room.purpose === "exam" ? "exam" : "training") : (byId("roomPurposeSelect")?.value === "exam" ? "exam" : "training");
+  const select = byId("roomPurposeSelect");
+  const format = byId("groupModeSelect");
+  if (select) { select.value = purpose; select.disabled = Boolean(room?.code) && !canCurrentUserChangeMode(room); }
+  if (format) {
+    if (!room) format.disabled = false;
+    Array.from(format.options).forEach(option => {
+      option.disabled = !allowedModeForPurpose(option.value, purpose);
+      option.hidden = option.disabled;
+    });
+    if (room) format.value = room.modeId;
+    else if (!allowedModeForPurpose(format.value, purpose)) format.value = "duel";
+  }
+  const modeHelp = byId("groupModeHelp");
+  if (!room && modeHelp) modeHelp.textContent = GROUP_MODES[format?.value || "duel"]?.description || GROUP_MODES.duel.description;
+  byId("examModeTip")?.classList.toggle("hidden", purpose !== "exam");
+  const creditTitle = byId("roomCreditTitle");
+  if (creditTitle) creditTitle.textContent = purpose === "exam" ? "Оценка испытания" : "Зачёт тренировки";
+}
+async function setRoomPurpose(purpose) {
+  if (!requireAuth() || !state.currentRoomCode || !["exam", "training"].includes(purpose)) return;
+  const result = await runTransaction(ref(db, getRoomPath(state.currentRoomCode)), raw => {
+    if (!raw) return;
+    const room = normalizeRoom(raw);
+    if (!canCurrentUserChangeMode(room)) return;
+    room.purpose = purpose;
+    if (!allowedModeForPurpose(room.modeId, purpose)) room.modeId = "duel";
+    room.readyMap = Object.fromEntries(Object.keys(room.participants).map(uid => [uid, false]));
+    room.readyDeadlineAt = 0;
+    room.creditPreview = purpose === "exam" ? examCreditPreview() : null;
+    return room;
+  });
+  if (!result.committed) notifyError("Тип встречи может менять только создатель до начала боя.");
+}
+
 function getRoomValidation(room) {
   const normalized = normalizeRoom(room);
   const mode = GROUP_MODES[normalized.modeId] || GROUP_MODES.duel;
   const participants = getParticipantsArray(normalized);
   const counts = getSideCounts(normalized);
+  if (!allowedModeForPurpose(normalized.modeId, normalized.purpose)) {
+    return { valid: false, message: "Этот формат недоступен для выбранного типа встречи." };
+  }
 
   if (!participants.length) {
     return { valid: false, message: "В комнате пока нет участников." };
@@ -1851,6 +1941,22 @@ function getRoomValidation(room) {
   const mirroredMatch = Boolean(mode.mirrored) && counts.A === exactB && counts.B === exactA;
 
   if (directMatch || mirroredMatch) {
+    if (normalized.purpose === "exam") {
+      const warriors = participants.filter(p => p.trainingStatus !== "apprentice");
+      const apprentices = participants.filter(p => p.trainingStatus === "apprentice");
+      if (!apprentices.length || warriors.length > 1) {
+        return { valid: false, message: "В испытании должен быть хотя бы один оруженосец и не больше одного воителя." };
+      }
+      if (warriors.length === 1) {
+        const warriorSide = warriors[0].side;
+        const warriorTeammates = participants.filter(p => p.side === warriorSide);
+        if (warriorTeammates.length !== 1 || !["duel", "team_2v1", "team_3v1"].includes(normalized.modeId)) {
+          return { valid: false, message: "Воитель сражается в одиночку против 1–3 оруженосцев." };
+        }
+      } else if (!["duel", "team_2v2", "team_3v3"].includes(normalized.modeId)) {
+        return { valid: false, message: "Между оруженосцами доступны равные команды: 1×1, 2×2 и 3×3." };
+      }
+    }
     return {
       valid: true,
       message: `Состав корректный: ${counts.A} против ${counts.B}.`
@@ -1864,7 +1970,7 @@ function getRoomValidation(room) {
 }
 
 function canCurrentUserChangeMode(room) {
-  return Boolean(state.user && room?.createdBy === state.user.uid && room.status !== "battle");
+  return Boolean(state.user && room?.createdBy === state.user.uid && ["waiting", "ready"].includes(room.status));
 }
 
 function canCurrentUserChangeOwnSide(room) {
@@ -1873,43 +1979,47 @@ function canCurrentUserChangeOwnSide(room) {
 
 async function setRoomMode(modeId) {
   if (!requireAuth() || !state.currentRoomCode) return;
-  const room = state.currentRoomSnapshot ? normalizeRoom(state.currentRoomSnapshot) : null;
-  if (!room || !canCurrentUserChangeMode(room)) {
-    notifyError("Менять режим комнаты может только создатель до начала боя.");
+  if (!GROUP_MODES[modeId]) return;
+  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
+  const result = await runTransaction(roomRef, raw => {
+    if (!raw) return;
+    const room = normalizeRoom(raw);
+    if (!canCurrentUserChangeMode(room) || !allowedModeForPurpose(modeId, room.purpose)) return;
+    const next = normalizeSidesForMode({ ...room, modeId });
+    next.readyMap = Object.fromEntries(Object.keys(next.participants).map(uid => [uid, false]));
+    next.readyDeadlineAt = 0;
+    next.status = getParticipantKeys(next).length > 1 ? "ready" : "waiting";
+    next.battle = null;
+    next.finishInfo = null;
+    next.matchId = "";
+    next.creditPreview = next.purpose === "exam" ? examCreditPreview() : null;
+    return next;
+  });
+  if (!result.committed) {
+    notifyError("Режим можно менять только до начала тренировки.");
     return;
   }
-
-  let next = normalizeSidesForMode({ ...room, modeId });
-  next.readyMap = Object.fromEntries(Object.keys(next.participants).map(uid => [uid, false]));
-
-  await update(ref(db, getRoomPath(state.currentRoomCode)), {
-    modeId,
-    participants: next.participants,
-    readyMap: next.readyMap,
-    status: getParticipantKeys(next).length > 1 ? "ready" : "waiting",
-    battle: null,
-    finishInfo: null,
-    matchId: ""
-  });
-
-  notify(`Режим комнаты: ${GROUP_MODES[modeId]?.label || modeId}.`);
+  notify(`Режим комнаты: ${GROUP_MODES[modeId].label}.`);
 }
 
 async function setMySide(side) {
   if (!requireAuth() || !state.currentRoomCode) return;
-  const room = state.currentRoomSnapshot ? normalizeRoom(state.currentRoomSnapshot) : null;
-  if (!room || !canCurrentUserChangeOwnSide(room)) return;
-  const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
-  const allowed = mode.type === "ffa" ? "solo" : side;
-
-  await update(ref(db, getRoomPath(state.currentRoomCode)), {
-    [`participants/${state.user.uid}/side`]: allowed,
-    [`readyMap/${state.user.uid}`]: false,
-    status: getParticipantKeys(room).length > 1 ? "ready" : "waiting",
-    battle: null,
-    finishInfo: null,
-    matchId: ""
+  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
+  const result = await runTransaction(roomRef, raw => {
+    if (!raw) return;
+    const room = normalizeRoom(raw);
+    if (!room.participants[state.user.uid] || !canCurrentUserChangeOwnSide(room)) return;
+    const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
+    const nextSide = mode.type === "ffa" ? "solo" : side;
+    if (!mode.sideOptions.includes(nextSide)) return;
+    room.participants[state.user.uid].side = nextSide;
+    room.readyMap = Object.fromEntries(Object.keys(room.participants).map(uid => [uid, false]));
+    room.readyDeadlineAt = 0;
+    room.status = getParticipantKeys(room).length > 1 ? "ready" : "waiting";
+    room.creditPreview = null;
+    return room;
   });
+  if (!result.committed) notifyError("Сторону можно менять только до начала тренировки.");
 }
 
 async function createRoom() {
@@ -1920,17 +2030,21 @@ async function createRoom() {
     return;
   }
 
-  let roomCode = generateRoomCode();
-  let tries = 0;
-
-  while (tries < 10) {
-    const snapshot = await get(ref(db, getRoomPath(roomCode)));
-    if (!snapshot.exists()) break;
-    roomCode = generateRoomCode();
-    tries += 1;
+  let roomCode = "";
+  for (let tries = 0; tries < 12; tries += 1) {
+    const candidate = generateRoomCode();
+    const roomRef = ref(db, getRoomPath(candidate));
+    const result = await runTransaction(roomRef, existing =>
+      existing == null ? {
+        ...createDefaultRoom(candidate, participant),
+        purpose: byId("roomPurposeSelect")?.value === "exam" ? "exam" : "training",
+        modeId: allowedModeForPurpose(byId("groupModeSelect")?.value || "duel", byId("roomPurposeSelect")?.value === "exam" ? "exam" : "training")
+          ? (byId("groupModeSelect")?.value || "duel") : "duel",
+        creditPreview: byId("roomPurposeSelect")?.value === "exam" ? examCreditPreview() : null
+      } : undefined);
+    if (result.committed) { roomCode = candidate; break; }
   }
-
-  await set(ref(db, getRoomPath(roomCode)), createDefaultRoom(roomCode, participant));
+  if (!roomCode) { notifyError("Не удалось создать комнату. Попробуй ещё раз."); return; }
 
   state.currentRoomCode = roomCode;
   state.currentParticipantKey = state.user.uid;
@@ -1943,63 +2057,53 @@ async function createRoom() {
 async function joinRoom() {
   if (!requireAuth()) return;
   const roomCode = (ui.room.roomCodeInput?.value || "").trim().toUpperCase();
-  if (!roomCode) {
-    notifyError("Впиши код комнаты.");
-    return;
-  }
-
+  if (!roomCode) { notifyError("Впиши код комнаты."); return; }
   const participant = createParticipantFromSelectedCharacter();
-  if (!participant) {
-    notifyError("Сначала выбери активного персонажа в профиле.");
-    return;
-  }
+  if (!participant) { notifyError("Сначала выбери активного персонажа в профиле."); return; }
 
   const roomRef = ref(db, getRoomPath(roomCode));
   const snapshot = await get(roomRef);
-  if (!snapshot.exists()) {
-    notifyError("Комната не найдена.");
-    return;
+  if (!snapshot.exists()) { notifyError("Комната не найдена."); return; }
+  const original = normalizeRoom(snapshot.val());
+  if (!original.participants[state.user.uid]) {
+    const result = await runTransaction(roomRef, raw => {
+      if (!raw) return;
+      const room = normalizeRoom(raw);
+      if (!["waiting", "ready"].includes(room.status)) return;
+      if (room.participants[state.user.uid]) return room;
+      if (getParticipantKeys(room).length >= ROOM_SOFT_LIMIT) return;
+      const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
+      const counts = getSideCounts(room);
+      let side = mode.type === "ffa" ? "solo" : (counts.A <= counts.B ? "A" : "B");
+      if (room.purpose === "exam" && ["team_2v1", "team_3v1"].includes(room.modeId)) {
+        const members = getParticipantsArray(room);
+        const warrior = members.find(p => p.trainingStatus !== "apprentice");
+        const apprentice = members.find(p => p.trainingStatus === "apprentice");
+        if (participant.trainingStatus === "apprentice") {
+          side = warrior ? (warrior.side === "A" ? "B" : "A") : (apprentice?.side || "A");
+        } else {
+          side = apprentice ? (apprentice.side === "A" ? "B" : "A") : "A";
+        }
+      }
+      room.participants[state.user.uid] = { ...participant, side };
+      room.readyMap = Object.fromEntries(Object.keys(room.participants).map(uid => [uid, false]));
+      room.readyDeadlineAt = 0;
+      room.status = getParticipantKeys(room).length > 1 ? "ready" : "waiting";
+      room.creditPreview = null;
+      return room;
+    });
+    if (!result.committed) {
+      notifyError("Комната уже запущена, завершена или заполнена. Можно вернуться только к своему бою.");
+      return;
+    }
   }
-
-  const room = normalizeRoom(snapshot.val());
-
-  if (room.participants[state.user.uid]) {
-    state.currentRoomCode = roomCode;
-    state.currentParticipantKey = state.user.uid;
-    saveActiveRoomLocal(roomCode);
-    watchCurrentRoom();
-    setScreen("room");
-    notify(`Вы вернулись в комнату ${roomCode}.`);
-    return;
-  }
-
-  if (getParticipantKeys(room).length >= ROOM_SOFT_LIMIT) {
-    notifyError("В комнате уже максимальное число игроков.");
-    return;
-  }
-
-  const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
-  const counts = getSideCounts(room);
-  let defaultSide = mode.type === "ffa" ? "solo" : "A";
-  if (mode.type === "team") {
-    defaultSide = counts.A <= counts.B ? "A" : "B";
-  }
-
-  await update(roomRef, {
-    [`participants/${state.user.uid}`]: { ...participant, side: defaultSide },
-    [`readyMap/${state.user.uid}`]: false,
-    status: getParticipantKeys(room).length + 1 > 1 ? "ready" : "waiting",
-    battle: null,
-    finishInfo: null,
-    matchId: ""
-  });
 
   state.currentRoomCode = roomCode;
   state.currentParticipantKey = state.user.uid;
   saveActiveRoomLocal(roomCode);
   watchCurrentRoom();
   setScreen("room");
-  notify(`Вы вошли в комнату ${roomCode}.`);
+  notify(original.participants[state.user.uid] ? `Вы вернулись в комнату ${roomCode}.` : `Вы вошли в комнату ${roomCode}.`);
 }
 
 async function tryAutoJoinSavedRoom() {
@@ -2024,43 +2128,57 @@ async function tryAutoJoinSavedRoom() {
 }
 
 async function leaveRoom() {
-  if (!requireAuth() || !state.currentRoomCode) {
-    notifyError("Вы сейчас не в комнате.");
-    return;
-  }
-
-  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
+  if (!requireAuth() || !state.currentRoomCode) { notifyError("Вы сейчас не в комнате."); return; }
+  const roomCode = state.currentRoomCode;
+  const roomRef = ref(db, getRoomPath(roomCode));
   const snapshot = await get(roomRef);
-  if (!snapshot.exists()) {
-    clearActiveRoomLocal();
-    state.currentRoomCode = "";
-    state.currentParticipantKey = "";
-    return;
+  if (snapshot.exists()) {
+    const room = normalizeRoom(snapshot.val());
+    if (room.status === "battle") {
+      notifyError("Во время тренировки нужно использовать действие «Убежать», а не обычный выход.");
+      return;
+    }
+    if (room.status === "finished" && state.pendingMatchSaveRooms.has(roomCode)) {
+      notifyError("Сначала сохраняется результат тренировки. Попробуй выйти после сохранения.");
+      return;
+    }
+    if (room.status === "finished") {
+      const everyoneSaved = getParticipantKeys(room).every(uid => room.resultsSavedBy?.[uid]);
+      if (room.createdBy === state.user.uid && everyoneSaved && room.matchId && !String(room.matchId).startsWith("claim_")) {
+        const closed = await runTransaction(roomRef, raw => {
+          if (!raw || raw.status !== "finished") return;
+          const current = normalizeRoom(raw);
+          if (!getParticipantKeys(current).every(uid => raw.resultsSavedBy?.[uid])) return;
+          if (!raw.matchId || String(raw.matchId).startsWith("claim_")) return;
+          return null;
+        });
+        notify(closed.committed ? "Комната закрыта, результаты сохранены." : "Вы вышли. Комната сохранена для остальных игроков.");
+      } else {
+        // The finished room is retained until the remaining players can save.
+        notify(room.createdBy === state.user.uid
+          ? "Вы вышли. Комната сохранена до получения результатов всеми участниками."
+          : "Вы вышли из завершённой комнаты. Результаты остаются в истории.");
+      }
+    } else {
+      const result = await runTransaction(roomRef, raw => {
+        if (!raw) return;
+        const current = normalizeRoom(raw);
+        if (!["waiting", "ready"].includes(current.status)) return;
+        if (!current.participants[state.user.uid]) return;
+        if (current.createdBy === state.user.uid || getParticipantKeys(current).length <= 1) return null;
+        delete current.participants[state.user.uid];
+        delete current.readyMap[state.user.uid];
+        current.readyMap = Object.fromEntries(Object.keys(current.participants).map(uid => [uid, false]));
+        current.readyDeadlineAt = 0;
+        current.status = getParticipantKeys(current).length > 1 ? "ready" : "waiting";
+        current.creditPreview = null;
+        return current;
+      });
+      if (!result.committed) { notifyError("Не удалось выйти: состояние комнаты изменилось."); return; }
+      notify(room.createdBy === state.user.uid ? "Комната закрыта." : "Вы покинули комнату.");
+    }
   }
-
-  const room = normalizeRoom(snapshot.val());
-  if (room.status === "battle") {
-    notifyError("Во время тренировки нужно использовать действие «Убежать», а не обычный выход.");
-    return;
-  }
-
-  const participants = getParticipantKeys(room);
-  if (room.createdBy === state.user.uid || participants.length <= 1) {
-    await remove(roomRef);
-    notify("Комната закрыта.");
-  } else {
-    const updates = {
-      [`participants/${state.user.uid}`]: null,
-      [`readyMap/${state.user.uid}`]: null,
-      battle: null,
-      finishInfo: null,
-      matchId: ""
-    };
-    updates.status = participants.length - 1 > 1 ? "ready" : "waiting";
-    await update(roomRef, updates);
-    notify("Вы покинули комнату.");
-  }
-
+  cleanupRoomWatcher();
   clearActiveRoomLocal();
   state.currentRoomCode = "";
   state.currentParticipantKey = "";
@@ -2068,84 +2186,70 @@ async function leaveRoom() {
   renderRoomIdleState();
 }
 
-async function tryStartBattleAutomatically(room) {
+function getRoomSetupSignature(room) {
   const normalized = normalizeRoom(room);
-  if (!normalized || !state.currentRoomCode) return;
-  if (normalized.status === "battle" || normalized.status === "finished") return;
+  const members = getParticipantsArray(normalized)
+    .map(p => [p.uid, p.characterId, p.trainingStatus, p.side, Boolean(normalized.readyMap?.[p.uid])])
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  return JSON.stringify([normalized.purpose, normalized.modeId, members]);
+}
 
-  const validation = getRoomValidation(normalized);
-  if (!validation.valid) return;
-
+async function tryStartBattleAutomatically(room) {
+  const roomCode = state.currentRoomCode;
+  const normalized = normalizeRoom(room);
+  if (!roomCode || !["waiting", "ready"].includes(normalized.status)) return;
+  if (!getRoomValidation(normalized).valid) return;
   const participants = getParticipantKeys(normalized);
-  if (participants.length < 2) return;
+  if (participants.length < 2 || !participants.every(uid => Boolean(normalized.readyMap?.[uid]))) return;
 
-  const everyoneReady = participants.every(uid => Boolean(normalized.readyMap?.[uid]));
-  if (!everyoneReady) return;
-
-  await runTransaction(ref(db, getRoomPath(state.currentRoomCode)), raw => {
-    if (!raw) return raw;
-    const roomTx = normalizeRoom(raw);
-    if (roomTx.status === "battle" || roomTx.status === "finished") return raw;
-    const validationTx = getRoomValidation(roomTx);
-    if (!validationTx.valid) return raw;
-    const participantsTx = getParticipantKeys(roomTx);
-    const everyoneReadyTx = participantsTx.length > 1 && participantsTx.every(uid => Boolean(roomTx.readyMap?.[uid]));
-    if (!everyoneReadyTx) return raw;
-
-    return raw;
+  const signature = getRoomSetupSignature(normalized);
+  const [battle, preview] = await Promise.all([
+    createBattleFromRoom(normalized),
+    normalized.purpose === "exam" ? Promise.resolve(examCreditPreview()) : getCreditPreviewForRoom(normalized)
+  ]);
+  const result = await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+    if (!raw) return;
+    const current = normalizeRoom(raw);
+    if (!["waiting", "ready"].includes(current.status)) return;
+    if (getRoomSetupSignature(current) !== signature) return;
+    if (!getRoomValidation(current).valid) return;
+    if (!getParticipantKeys(current).every(uid => Boolean(current.readyMap[uid]))) return;
+    if (current.readyDeadlineAt && current.readyDeadlineAt <= now()) return;
+    current.status = "battle";
+    current.readyDeadlineAt = 0;
+    current.battle = battle;
+    current.creditPreview = preview; // Freeze credit eligibility at battle start.
+    current.finishInfo = null;
+    current.matchId = "";
+    return current;
   });
-
-  const fresh = await get(ref(db, getRoomPath(state.currentRoomCode)));
-  if (!fresh.exists()) return;
-  const freshRoom = normalizeRoom(fresh.val());
-  if (freshRoom.status === "battle" || freshRoom.status === "finished") return;
-
-  const battle = await createBattleFromRoom(freshRoom);
-  await update(ref(db, getRoomPath(state.currentRoomCode)), {
-    status: "battle",
-    battle,
-    finishInfo: null,
-    matchId: ""
-  });
+  if (result.committed) notify(normalized.purpose === "exam" ? "Воинское испытание начинается." : "Тренировка начинается.");
 }
 
 async function toggleReady() {
-  if (!requireAuth() || !state.currentRoomCode) {
-    notifyError("Сначала войди в комнату.");
-    return;
-  }
-
-  const snapshot = await get(ref(db, getRoomPath(state.currentRoomCode)));
-  if (!snapshot.exists()) {
-    notifyError("Комната больше не существует.");
-    return;
-  }
-
-  const room = normalizeRoom(snapshot.val());
-  if (!room.participants[state.user.uid]) {
-    notifyError("Ты не участник этой комнаты.");
-    return;
-  }
-
-  if (room.status === "battle") {
-    notifyError("Во время боя менять готовность нельзя.");
-    return;
-  }
-
-  const nextReady = !Boolean(room.readyMap?.[state.user.uid]);
-
-  await update(ref(db, getRoomPath(state.currentRoomCode)), {
-    [`readyMap/${state.user.uid}`]: nextReady,
-    status: getParticipantKeys(room).length > 1 ? "ready" : "waiting"
+  if (!requireAuth() || !state.currentRoomCode) { notifyError("Сначала войди в комнату."); return; }
+  const roomCode = state.currentRoomCode;
+  let nextReady = false;
+  const result = await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+    if (!raw) return;
+    const room = normalizeRoom(raw);
+    if (!["waiting", "ready"].includes(room.status) || !room.participants[state.user.uid]) return;
+    if (room.readyDeadlineAt && room.readyDeadlineAt <= now()) {
+      room.readyMap = Object.fromEntries(Object.keys(room.participants).map(uid => [uid, false]));
+      room.readyDeadlineAt = 0;
+    }
+    nextReady = !Boolean(room.readyMap?.[state.user.uid]);
+    room.readyMap[state.user.uid] = nextReady;
+    const someoneReady = Object.values(room.readyMap).some(Boolean);
+    room.readyDeadlineAt = someoneReady ? (room.readyDeadlineAt && room.readyDeadlineAt > now() ? room.readyDeadlineAt : now() + READY_TIMEOUT_MS) : 0;
+    room.status = getParticipantKeys(room).length > 1 ? "ready" : "waiting";
+    return room;
   });
-
+  if (!result.committed) { notifyError("Готовность можно менять только до начала боя."); return; }
   notify(nextReady ? "Готовность подтверждена." : "Готовность снята.");
-
-  const fresh = await get(ref(db, getRoomPath(state.currentRoomCode)));
-  if (fresh.exists()) {
-    await tryStartBattleAutomatically(normalizeRoom(fresh.val()));
-  }
+  await tryStartBattleAutomatically(normalizeRoom(result.snapshot.val()));
 }
+
 
 function buildCreditMatrixForPair(selfStatus, enemyStatus) {
   const selfApprentice = selfStatus === "apprentice";
@@ -2239,7 +2343,7 @@ async function getCreditPreviewForRoom(room) {
 function getReadyCountdownLeft(room) {
   const marks = Object.entries(room?.readyMap || {}).filter(([, value]) => Boolean(value));
   if (!marks.length) return 0;
-  return READY_TIMEOUT_MS;
+  return room?.readyDeadlineAt ? Math.max(0, room.readyDeadlineAt - now()) : READY_TIMEOUT_MS;
 }
 
 function getBattleCountdownLeft(room) {
@@ -2249,26 +2353,35 @@ function getBattleCountdownLeft(room) {
 }
 
 function startRoomTimer(deadline) {
+  if (!deadline) { stopRoomTimer(); return; }
+  if (state.roomTimerInterval && state.roomTimerDeadline === deadline) return;
   stopRoomTimer();
-  if (!deadline) return;
-
-  state.roomTimerInterval = setInterval(() => {
+  state.roomTimerDeadline = deadline;
+  const tick = () => {
     const left = Math.max(0, deadline - now());
-    if (ui.room.roomTimer) {
-      const minutes = String(Math.floor(left / 60000)).padStart(2, "0");
-      const seconds = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
-      text(ui.room.roomTimer, `${minutes}:${seconds}`);
+    const minutes = String(Math.floor(left / 60000)).padStart(2, "0");
+    const seconds = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
+    text(ui.room.roomTimer, `${minutes}:${seconds}`);
+    if (left <= 0) {
+      stopRoomTimer();
+      const code = state.currentRoomCode;
+      if (code && state.currentRoomSnapshot && !state.roomTimerExpiring) {
+        state.roomTimerExpiring = true;
+        ensureRoomTimeouts(code, state.currentRoomSnapshot)
+          .catch(console.error)
+          .finally(() => { state.roomTimerExpiring = false; });
+      }
     }
-    if (left <= 0) stopRoomTimer();
-  }, 1000);
+  };
+  tick();
+  if (now() < deadline) state.roomTimerInterval = setInterval(tick, 1000);
 }
 
 function stopRoomTimer() {
-  if (state.roomTimerInterval) {
-    clearInterval(state.roomTimerInterval);
-    state.roomTimerInterval = null;
-  }
-  if (ui.room.roomTimer) text(ui.room.roomTimer, "00:00");
+  if (state.roomTimerInterval) clearInterval(state.roomTimerInterval);
+  state.roomTimerInterval = null;
+  state.roomTimerDeadline = 0;
+  text(ui.room.roomTimer, "00:00");
 }
 
 async function createBattleFromRoom(room) {
@@ -2278,18 +2391,12 @@ async function createBattleFromRoom(room) {
 
   for (const uid of queue) {
     const participant = normalizeParticipant(normalized.participants[uid]);
-    let character = null;
+    const charSnap = await get(ref(db, getCharacterPath(participant.uid, participant.characterId)));
+    const character = charSnap.exists() ? normalizeCharacter(charSnap.val()) : null;
 
-    if (participant.uid === state.user?.uid) {
-      character = getCharacterById(participant.characterId);
-    }
-
-    if (!character) {
-      const snap = await get(ref(db, getCharacterPath(participant.uid, participant.characterId)));
-      if (snap.exists()) character = normalizeCharacter(snap.val());
-    }
-
-    const combat = character ? getCombatViewTotals(character) : createDefaultCombatBase();
+    const combat = createDefaultCombatBase(); // Upgrades apply only to RP battles outside the app.
+    const examPrepCredits = normalized.purpose === "exam" && character?.trainingStatus === "apprentice"
+      ? Math.max(0, Number(character.training.progress.creditedTrainings || 0)) : 0;
 
     fighters[uid] = normalizeBattleFighter({
       uid: participant.uid,
@@ -2299,6 +2406,7 @@ async function createBattleFromRoom(room) {
       clan: participant.clan,
       trainingStatus: participant.trainingStatus,
       side: participant.side,
+      examPrepCredits,
       combat: {
         accuracy: combat.accuracy || 0,
         dodge: combat.dodge || 0,
@@ -2315,6 +2423,8 @@ async function createBattleFromRoom(room) {
 
   return {
     modeId: normalized.modeId,
+    examJournal: {},
+    purpose: normalized.purpose,
     startedAt: now(),
     completedAt: 0,
     lastActionAt: now(),
@@ -2337,34 +2447,15 @@ roundResolvedAt: 0,
 
 async function startBattle() {
   if (!requireAuth() || !state.currentRoomCode) return;
-  const snapshot = await get(ref(db, getRoomPath(state.currentRoomCode)));
-  if (!snapshot.exists()) return;
-  const room = normalizeRoom(snapshot.val());
-  if (!canCurrentUserChangeMode(room)) {
-    notifyError("Стартовать бой вручную может только создатель комнаты.");
-    return;
+  const roomSnap = await get(ref(db, getRoomPath(state.currentRoomCode)));
+  if (!roomSnap.exists()) return;
+  const room = normalizeRoom(roomSnap.val());
+  if (!canCurrentUserChangeMode(room)) { notifyError("Стартовать бой может только создатель до начала тренировки."); return; }
+  if (!getRoomValidation(room).valid) { notifyError(getRoomValidation(room).message); return; }
+  if (!getParticipantKeys(room).every(uid => Boolean(room.readyMap?.[uid]))) {
+    notifyError("Сначала дождись готовности всех участников."); return;
   }
-  const validation = getRoomValidation(room);
-  if (!validation.valid) {
-    notifyError(validation.message);
-    return;
-  }
-  const everyoneReady = getParticipantKeys(room).every(uid => Boolean(room.readyMap?.[uid]));
-  if (!everyoneReady) {
-    notifyError("Сначала дождись готовности всех участников.");
-    return;
-  }
-
-  const battle = await createBattleFromRoom(room);
-
-  await update(ref(db, getRoomPath(state.currentRoomCode)), {
-    status: "battle",
-    battle,
-    finishInfo: null,
-    matchId: ""
-  });
-
-  notify("Тренировка начинается.");
+  await tryStartBattleAutomatically(room);
 }
 
 function getAliveFighterIds(battle) {
@@ -2571,7 +2662,7 @@ function tryDefenderDodge(defender, defenderName, actionLabel, logs, defenseStat
 
   defenseState.used = true;
 
-  const dodgeChance = clamp(CHANCES.dodge + (defender.combat.dodge || 0), 0, 95);
+  const dodgeChance = CHANCES.dodge; // Earned bonuses apply only in RP battles outside this app.
   const dodgeRoll = randomRoll();
 
   if (dodgeRoll <= dodgeChance) {
@@ -2599,19 +2690,19 @@ function resolveAttackAction(battle, attackerUid, action, logs, defenseMap = {})
   let bodyTarget = null;
 
   if (action.type === "sand") {
-    chance = CHANCES.sand + (attacker.combat.accuracy || 0) - penalty;
+    chance = CHANCES.sand - penalty;
     actionLabel = "Песок в глаза";
   }
 
   if (action.type === "paw") {
     bodyTarget = BODY_TARGETS[action.targetKey];
     if (!bodyTarget) return;
-    chance = CHANCES.paw + (attacker.combat.accuracy || 0) + bodyTarget.chanceModifier - penalty;
+    chance = CHANCES.paw + bodyTarget.chanceModifier - penalty;
     actionLabel = `Удар лапой в ${bodyTarget.label}`;
   }
 
   if (action.type === "trip") {
-    chance = CHANCES.trip + (attacker.combat.accuracy || 0) - penalty;
+    chance = CHANCES.trip - penalty;
     actionLabel = "Подсечка";
   }
 
@@ -2645,8 +2736,8 @@ function resolveAttackAction(battle, attackerUid, action, logs, defenseMap = {})
   }
 
   if (action.type === "paw") {
-    const directDamage = Math.round(bodyTarget.directDamage * (1 + (attacker.combat.clawPower || 0) / 100));
-    const dotDamage = Math.round(bodyTarget.dotDamage * (1 + (attacker.combat.clawPower || 0) / 100));
+    const directDamage = bodyTarget.directDamage;
+    const dotDamage = bodyTarget.dotDamage;
     defender.hp = Math.max(0, defender.hp - directDamage);
     defender.effects.pendingDotDamage += dotDamage;
     logs.push(`${attackerName} попадает лапой в ${bodyTarget.label}. Бросок: ${roll} из ${chance}.`);
@@ -2659,8 +2750,8 @@ function resolveAttackAction(battle, attackerUid, action, logs, defenseMap = {})
   }
 
   if (action.type === "trip") {
-    const directDamage = Math.round(DAMAGE.trip * (1 + (attacker.combat.bitePower || 0) / 100));
-    const dotDamage = Math.round(DOT.trip * (1 + (attacker.combat.bitePower || 0) / 100));
+    const directDamage = DAMAGE.trip;
+    const dotDamage = DOT.trip;
     defender.hp = Math.max(0, defender.hp - directDamage);
     defender.effects.pendingDotDamage += dotDamage;
     defender.effects.stunTurns += 1;
@@ -2899,6 +2990,7 @@ function resolveRound(battle) {
     }
   });
 
+  if (battle.purpose === "exam") recordExamRound(battle, actorOrder, roundState);
   battle.lastActionAt = now();
   battle.inactivityDeadlineAt = now() + INACTIVITY_TIMEOUT_MS;
 
@@ -3360,7 +3452,7 @@ function renderBattleForPlayer(room, battle) {
     <div class="battle-status-shell">
       <div class="battle-status-top">
         <span class="battle-chip ${canChooseAction ? "battle-chip-active" : "battle-chip-soft"}">
-          ${battle.finished ? "Тренировка завершена" : alreadyChosen ? "Действие выбрано" : "Выбор действия"}
+          ${battle.finished ? (room.purpose === "exam" ? "Испытание завершено" : "Тренировка завершена") : alreadyChosen ? "Действие выбрано" : "Выбор действия"}
         </span>
         <span class="battle-chip">Режим: ${escapeHtml(getModeLabel(battle.modeId))}</span>
         <span class="battle-chip">Раунд: ${battle.roundNumber}</span>
@@ -3558,7 +3650,7 @@ function renderRoomPlayers(room) {
 }
 
 function renderCreditPreview(room) {
-  const preview = room.creditPreview || {
+  const preview = room.purpose === "exam" ? examCreditPreview() : room.creditPreview || {
     badge: "Зачёта не будет",
     reason: "Сначала собери корректный состав комнаты.",
     eligibleByParticipant: {}
@@ -3566,6 +3658,10 @@ function renderCreditPreview(room) {
 
   text(ui.room.creditBadge, preview.badge || "Зачёта не будет");
 
+  if (room.purpose === "exam") {
+    text(ui.room.creditReasonBox, preview.reason);
+    return;
+  }
   const participants = getParticipantsArray(room);
   const lines = participants.map(participant => {
     const item = preview.eligibleByParticipant?.[participant.uid];
@@ -3580,6 +3676,12 @@ function renderCreditPreview(room) {
 }
 
 function renderWaitingState(room) {
+  if (!["waiting", "ready"].includes(room.status)) {
+    html(ui.room.waitingStateBox, "");
+    const modeSelect = byId("groupModeSelect");
+    if (modeSelect) modeSelect.disabled = true;
+    return;
+  }
   const validation = getRoomValidation(room);
   const participants = getParticipantsArray(room);
   const mode = GROUP_MODES[room.modeId] || GROUP_MODES.duel;
@@ -3615,6 +3717,7 @@ function renderWaitingState(room) {
   const modeHelp = byId("groupModeHelp");
   const modeValidity = byId("groupModeValidity");
 
+  updatePurposeControls(room);
   if (modeSelect) {
     modeSelect.value = room.modeId;
     modeSelect.disabled = !canCurrentUserChangeMode(room);
@@ -3653,6 +3756,17 @@ function renderRoomResultCard(room) {
   }
 
   const battle = room.battle ? normalizeBattle(room.battle) : null;
+  if (room.purpose === "exam") {
+    html(ui.room.roomResultCard, `
+      <div class="result-victory-card exam-summary">
+        <div class="result-victory-crown">✦</div>
+        <div class="result-victory-title">Итоговое воинское испытание</div>
+        <div class="result-victory-text">Каждый оруженосец оценивается отдельно. Исход поединка не определяет результат экзамена.</div>
+        ${renderExamSummary(room)}
+      </div>
+    `);
+    return;
+  }
 
   html(ui.room.roomResultCard, `
     <div class="result-victory-card">
@@ -3682,7 +3796,11 @@ function renderRoomBadge(roomCode = "", roomStatus = "") {
 }
 
 function renderRoomIdleState() {
+  hide(ui.room.startBattleBtn);
+  hide(ui.room.readyToggleBtn);
+  hide(ui.room.leaveRoomBtn);
   state.currentRoomSnapshot = null;
+  updatePurposeControls(null);
   renderRoomBadge();
   setRoomStatus("Пока ничего не происходит.");
   html(ui.room.roomMeta, `<div class="room-meta-line">◈ Статус: ожидание</div><div class="room-meta-line">◈ Комната: —</div>`);
@@ -3703,10 +3821,15 @@ function renderRoomIdleState() {
 function renderRoom(roomCode, rawRoom) {
   const room = normalizeRoom(rawRoom);
   state.currentRoomSnapshot = room;
+  updatePurposeControls(room);
   state.currentRoomCode = roomCode;
   state.currentParticipantKey = room.participants[state.user?.uid] ? state.user.uid : "";
 
   renderRoomBadge(roomCode, room.status);
+  const preBattle = ["waiting", "ready"].includes(room.status);
+  ui.room.startBattleBtn?.classList.toggle("hidden", !(preBattle && room.createdBy === state.user?.uid));
+  ui.room.readyToggleBtn?.classList.toggle("hidden", !(preBattle && state.user && room.participants[state.user.uid]));
+  ui.room.leaveRoomBtn?.classList.toggle("hidden", room.status === "battle");
   renderRoomPlayers(room);
   renderCreditPreview(room);
   renderWaitingState(room);
@@ -3718,24 +3841,22 @@ function renderRoom(roomCode, rawRoom) {
   const participants = getParticipantsArray(room);
   const validation = getRoomValidation(room);
   const lines = [
-    `Код комнаты: ${roomCode}`,
-    `Статус: ${getRoomStatusLabel(room.status)}`,
-    `Режим: ${getModeLabel(room.modeId)}`,
-    `Участников: ${participants.length}`,
-    `Состав: ${validation.message}`
+    `${room.purpose === "exam" ? "Воинское испытание" : "Тренировка"} · ${getModeLabel(room.modeId)} · ${participants.length} участник(ов)`,
+    validation.message
   ];
 
   html(ui.room.roomMeta, `
     <div class="room-meta-line">◈ Статус: ${escapeHtml(getRoomStatusLabel(room.status))}</div>
     <div class="room-meta-line">◈ Комната: ${escapeHtml(roomCode)}</div>
-    <div class="room-meta-line">◈ Режим: ${escapeHtml(getModeLabel(room.modeId))}</div>
+    <div class="room-meta-line">◈ Режим: ${room.purpose === "exam" ? "Воинское испытание · " : ""}${escapeHtml(getModeLabel(room.modeId))}</div>
   `);
 
   if (room.status === "waiting" || room.status === "ready") {
     hide(ui.battle.screen);
-    stopRoomTimer();
     if (participants.some(item => room.readyMap?.[item.uid])) {
-      startRoomTimer(now() + getReadyCountdownLeft(room));
+      startRoomTimer(room.readyDeadlineAt || (now() + getReadyCountdownLeft(room)));
+    } else {
+      stopRoomTimer();
     }
     setRoomStatus(lines.join("\n"));
     return;
@@ -3752,8 +3873,8 @@ function renderRoom(roomCode, rawRoom) {
   show(ui.battle.screen);
 
   if (room.status === "battle") {
-    lines.push(`Круг собирается. Отдельные карточки появятся после завершения круга.`);
-    startRoomTimer(now() + getBattleCountdownLeft(room));
+    lines.push("Ожидаем действия участников. Итоги появятся после завершения круга.");
+    startRoomTimer(battle.inactivityDeadlineAt);
   }
 
   if (room.status === "finished") stopRoomTimer();
@@ -3814,89 +3935,232 @@ async function finishBattleAsUnfinished(roomCode, reasonText) {
 async function ensureRoomTimeouts(roomCode, room) {
   const normalized = normalizeRoom(room);
   if (!roomCode) return;
-
-  if (normalized.status === "battle" && normalized.battle) {
-    if (getBattleCountdownLeft(normalized) <= 0) {
-      await finishBattleAsUnfinished(roomCode, "Тренировка завершена из-за 10 минут бездействия.");
-      notify("Тренировка мягко завершена из-за бездействия.");
-    }
+  if (normalized.status === "battle" && normalized.battle && getBattleCountdownLeft(normalized) <= 0) {
+    await finishBattleAsUnfinished(roomCode, "Тренировка завершена из-за 10 минут бездействия.");
+  }
+  if (["waiting", "ready"].includes(normalized.status) && normalized.readyDeadlineAt && normalized.readyDeadlineAt <= now()) {
+    await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+      if (!raw) return;
+      const current = normalizeRoom(raw);
+      if (!["waiting", "ready"].includes(current.status)) return;
+      if (!current.readyDeadlineAt || current.readyDeadlineAt > now()) return;
+      current.readyMap = Object.fromEntries(Object.keys(current.participants).map(uid => [uid, false]));
+      current.readyDeadlineAt = 0;
+      return current;
+    });
   }
 }
 
 function cleanupRoomWatcher() {
-  if (typeof state.unsubscribeRoom === "function") {
-    state.unsubscribeRoom();
-    state.unsubscribeRoom = null;
-  }
+  if (typeof state.unsubscribeRoom === "function") state.unsubscribeRoom();
+  state.unsubscribeRoom = null;
+  state.activeRoomWatchCode = "";
+  state.creditPreviewRequestKey = "";
+  stopRoomTimer();
 }
 
 function watchCurrentRoom() {
   cleanupRoomWatcher();
-
-  if (!state.currentRoomCode) {
-    renderRoomIdleState();
-    return;
-  }
-
-  const roomRef = ref(db, getRoomPath(state.currentRoomCode));
+  const roomCode = state.currentRoomCode;
+  if (!roomCode) { renderRoomIdleState(); return; }
+  state.activeRoomWatchCode = roomCode;
+  const roomRef = ref(db, getRoomPath(roomCode));
   state.unsubscribeRoom = onValue(roomRef, snapshot => {
+    if (state.activeRoomWatchCode !== roomCode || state.currentRoomCode !== roomCode) return;
     if (!snapshot.exists()) {
+      cleanupRoomWatcher();
       clearActiveRoomLocal();
       state.currentRoomCode = "";
       state.currentParticipantKey = "";
       renderRoomIdleState();
       return;
     }
-
     const room = normalizeRoom(snapshot.val());
-    state.currentRoomSnapshot = room;
-
-    renderRoom(state.currentRoomCode, room);
-    ensureRoomTimeouts(state.currentRoomCode, room).catch(console.error);
-
-    if (room.status !== "battle" && room.status !== "finished") {
-      getCreditPreviewForRoom(room)
-        .then(preview => update(ref(db, getRoomPath(state.currentRoomCode)), { creditPreview: preview }).catch(() => {}))
-        .catch(console.error);
-
+    renderRoom(roomCode, room);
+    ensureRoomTimeouts(roomCode, room).catch(console.error);
+    if (["waiting", "ready"].includes(room.status)) {
+      // Calculate a preview only when the participants and sides change, not on every DB update.
+      const signature = roomCode + ":" + getRoomSetupSignature(room);
+      if (signature !== state.creditPreviewRequestKey) {
+        state.creditPreviewRequestKey = signature;
+        (room.purpose === "exam" ? Promise.resolve(examCreditPreview()) : getCreditPreviewForRoom(room)).then(preview => {
+          if (state.activeRoomWatchCode !== roomCode || state.currentRoomCode !== roomCode) return;
+          if (state.creditPreviewRequestKey !== signature) return;
+          text(ui.room.creditBadge, preview.badge);
+          if (room.purpose === "exam") { text(ui.room.creditReasonBox, preview.reason); return; }
+          const names = getParticipantsArray(room).map(p => {
+            const item = preview.eligibleByParticipant?.[p.uid];
+            return `${p.characterName}: ${item?.getsCredit ? "зачёт возможен" : "без зачёта"}. ${item?.reason || ""}`;
+          });
+          text(ui.room.creditReasonBox, [preview.reason || "", ...names].join(" "));
+        }).catch(console.error);
+      }
       tryStartBattleAutomatically(room).catch(console.error);
-    }
-
-    if (room.status === "finished") {
-      saveFinishedMatchIfNeeded(state.currentRoomCode, room).catch(error => {
+    } else if (room.status === "finished") {
+      saveFinishedMatchIfNeeded(roomCode, room).catch(error => {
         console.error(error);
-        notifyError(`Не удалось сохранить итог тренировки: ${error.message}`);
+        notifyError("Не удалось сохранить результат. Вернись в комнату чуть позже.");
       });
     }
-
-    maybeShowRoomRules(state.currentRoomCode).catch(console.error);
+    maybeShowRoomRules(roomCode).catch(console.error);
   });
 }
 
-function isClaimToken(matchId) {
-  return typeof matchId === "string" && matchId.startsWith("claim_");
+
+// Examination uses the normal round engine and chances; this journal only observes choices.
+function recordExamRound(battle, actorOrder, roundState) {
+  if (!battle.examJournal || typeof battle.examJournal !== "object") battle.examJournal = {};
+  const actions = battle.queuedActions || {};
+  const allActions = actorOrder.map(uid => ({ uid, action: actions[uid], fighter: battle.fighters[uid] }));
+  for (const uid of actorOrder) {
+    const fighter = battle.fighters[uid];
+    if (fighter?.trainingStatus !== "apprentice") continue;
+    const action = actions[uid];
+    const skipped = Boolean(roundState[uid]?.skipped);
+    const attacks = action?.kind === "multiAttack" ? safeArray(action.actions) : [];
+    const moveTypes = [...new Set(attacks.map(a => a.type).filter(t => ["sand", "paw", "trip"].includes(t)))];
+    const teammates = allActions.filter(other => other.uid !== uid && other.fighter?.side === fighter.side
+      && other.fighter?.trainingStatus === "apprentice" && other.action?.kind === "multiAttack" && !roundState[other.uid]?.skipped);
+    const support = !skipped && attacks.length > 0 && teammates.some(other =>
+      safeArray(other.action.actions).some(a => attacks.some(mine => mine.targetUid === a.targetUid && mine.type !== a.type)));
+    const existing = safeArray(battle.examJournal[uid]);
+    if (existing.some(entry => entry.round === battle.roundNumber)) continue;
+    existing.push({
+      round: battle.roundNumber,
+      skipped,
+      choice: !skipped && action?.kind === "defend" ? "defend" : !skipped && moveTypes.length ? "attack" : "none",
+      moveTypes,
+      supportedAlly: support,
+      actedUnderPressure: !skipped && fighter.hp < 100 && (action?.kind === "defend" || moveTypes.length > 0)
+    });
+    battle.examJournal[uid] = existing;
+  }
+}
+function gradeExamFighter(battle, fighter) {
+  const turns = safeArray(battle?.examJournal?.[fighter.uid]);
+  const actions = turns.filter(t => !t.skipped && t.choice !== "none");
+  const offenses = actions.filter(t => t.choice === "attack");
+  const guards = actions.filter(t => t.choice === "defend");
+  const moves = new Set(actions.flatMap(t => safeArray(t.moveTypes)));
+  if (guards.length) moves.add("defend");
+  const prepared = examPreparationBonus(Math.max(0, Number(fighter.examPrepCredits || 0)));
+  if (battle.finishReason === "timeout_unfinished") return {
+    status: "unfinished", mastery: 0, endurance: 0, tactics: 0, preparation: prepared, total: 0,
+    rounds: actions.length, creditedTrainings: fighter.examPrepCredits || 0
+  };
+  // Early knockouts are inconclusive instead of undeserved failures.
+  if (actions.length < 3) return {
+    status: "insufficient", mastery: 0, endurance: 0, tactics: 0, preparation: prepared, total: prepared,
+    rounds: actions.length, creditedTrainings: fighter.examPrepCredits || 0
+  };
+  const mastery = Number(offenses.length >= 1)
+    + Number(offenses.length >= 2 && new Set(offenses.flatMap(t => t.moveTypes)).size >= 2)
+    + Number(offenses.length >= 3);
+  const endurance = Number(actions.length >= 2)
+    + Number(guards.length >= 1 || actions.some(t => t.actedUnderPressure))
+    + Number(actions.length >= 3 || guards.length >= 2);
+  const tactics = Number(moves.size >= 2)
+    + Number(moves.size >= 3 || (offenses.length >= 1 && guards.length >= 1))
+    + Number(actions.some(t => t.supportedAlly) || (actions.length >= 4 && moves.size >= 2));
+  const total = mastery + endurance + tactics + prepared;
+  return {
+    status: total >= 7 && mastery > 0 && endurance > 0 && tactics > 0 ? "passed" : "failed",
+    mastery, endurance, tactics, preparation: prepared, total,
+    rounds: actions.length, creditedTrainings: fighter.examPrepCredits || 0
+  };
+}
+function getExamReport(room) {
+  const battle = room?.battle ? normalizeBattle(room.battle) : null;
+  if (!battle) return [];
+  return Object.values(battle.fighters).filter(f => f.trainingStatus === "apprentice")
+    .map(f => ({uid:f.uid, characterId:f.characterId, characterName:f.characterName, ...gradeExamFighter(battle, f)}));
+}
+const EXAM_STATUS_TEXT = {
+  passed: "Испытание пройдено", failed: "Испытание не пройдено",
+  insufficient: "Недостаточно действий для оценки", unfinished: "Испытание прервано"
+};
+function renderExamSummary(room) {
+  const reports = getExamReport(room);
+  return `<div class="exam-results">${reports.map(report => `
+    <div class="exam-result ${report.status === "passed" ? "exam-result-success" : ""}">
+      <div class="exam-result-top"><strong>${escapeHtml(report.characterName)}</strong><span>${escapeHtml(EXAM_STATUS_TEXT[report.status])}</span></div>
+      <div class="exam-result-marks"><span>Мастерство: ${report.mastery}/3</span><span>Стойкость: ${report.endurance}/3</span><span>Тактика: ${report.tactics}/3</span></div>
+      <div class="exam-result-score">Подготовка: +${report.preparation} · Итог: ${report.total}/11</div>
+    </div>`).join("")}</div>`;
+}
+async function saveExamResultIfNeeded(roomCode, room) {
+  if (!room || room.status !== "finished" || !state.user) return;
+  const matchId = getStableMatchId(roomCode, room);
+  const key = `${state.user.uid}:exam:${matchId}`;
+  if (state.completedMatchSaves.has(key) || state.pendingMatchSaveRooms.has(roomCode)) return;
+  state.pendingMatchSaveRooms.add(roomCode);
+  try {
+    const battle = room.battle ? normalizeBattle(room.battle) : null;
+    const finishedAt = battle?.completedAt || room.finishInfo?.completedAt || now();
+    const reports = getExamReport(room);
+    const mine = reports.filter(r => r.uid === state.user.uid);
+    const enemyNames = getParticipantsArray(room).filter(p => p.uid !== state.user.uid)
+      .map(p => p.characterName).join(", ");
+    for (const report of mine) {
+      await runTransaction(ref(db, getCharacterPath(report.uid, report.characterId)), raw => {
+        if (!raw) return;
+        const next = deepClone(raw); // Preserve every legacy field, even unknown ones.
+        next.training ||= {};
+        const exams = next.training.exams || {attempts:0,passed:0,failed:0,latest:null,records:{}};
+        const records = {...(exams.records || {})};
+        if (records[matchId]) return;
+        const entry = {
+          ...report, matchId, roomCode, modeId: room.modeId, finishedAt,
+          opponents: enemyNames
+        };
+        records[matchId] = entry;
+        // Keep all attempts so old exam results can never be counted twice.
+        next.training.exams = {
+          attempts: Number(exams.attempts || 0) + 1,
+          passed: Number(exams.passed || 0) + Number(report.status === "passed"),
+          failed: Number(exams.failed || 0) + Number(report.status === "failed"),
+          latest: entry,
+          records
+        };
+        next.updatedAt = now();
+        return next;
+      });
+    }
+    if (getParticipantByUid(room, state.user.uid)) {
+      await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+        if (!raw || raw.status !== "finished" || raw.purpose !== "exam") return;
+        raw.resultsSavedBy = {...(raw.resultsSavedBy || {}), [state.user.uid]: true};
+        return raw;
+      });
+      await loadOwnCharacters();
+      renderProfile();
+      if (state.currentScreen === "history") loadAndRenderHistory().catch(console.error);
+    }
+    state.completedMatchSaves.add(key);
+  } finally {
+    state.pendingMatchSaveRooms.delete(roomCode);
+  }
 }
 
-function isOwnClaimToken(matchId) {
-  if (!state.user?.uid || !isClaimToken(matchId)) return false;
-  const parts = String(matchId).split("_");
-  return parts[1] === state.user.uid;
+function getStableMatchId(roomCode, room) {
+  const battle = room?.battle ? normalizeBattle(room.battle) : null;
+  return `${roomCode}_${battle?.startedAt || battle?.completedAt || room?.finishInfo?.completedAt || 0}`;
 }
 
-async function claimMatchWrite(roomCode) {
-  const token = `claim_${state.user?.uid || "anon"}_${now()}`;
-  const result = await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
-    if (!raw) return raw;
-    const room = normalizeRoom(raw);
-    if (room.matchId) return raw;
-    raw.matchId = token;
-    return raw;
-  });
+function wasMatchProcessed(character, matchId, finishedAt) {
+  const progress = normalizeCharacter(character).training.progress;
+  return Boolean(progress.processedMatchIds?.[matchId]) ||
+    (Boolean(matchId) && progress.lastProcessedMatchId === matchId) ||
+    (Boolean(finishedAt) && progress.lastProcessedMatchAt === finishedAt);
+}
 
-  if (!result.committed) return null;
-  const value = result.snapshot.val();
-  if (!value?.matchId || value.matchId !== token) return null;
-  return token;
+function markMatchProcessed(character, matchId, finishedAt) {
+  if (!matchId) return;
+  const history = { ...(character.training.progress.processedMatchIds || {}), [matchId]: finishedAt || now() };
+  const sorted = Object.entries(history).sort((a, b) => (b[1] || 0) - (a[1] || 0));
+  character.training.progress.processedMatchIds = Object.fromEntries(sorted.slice(0, 200));
+  character.training.progress.lastProcessedMatchId = matchId;
+  character.training.progress.lastProcessedMatchAt = finishedAt;
 }
 
 function createHistoryRecordPayload(roomCode, room, preview) {
@@ -3959,7 +4223,7 @@ function applyBattleOutcomeToCharacter({
 }) {
   const next = deepClone(normalizeCharacter(character));
 
-  if (matchId && next.training.progress.lastProcessedMatchId === matchId) {
+  if (wasMatchProcessed(next, matchId, finishedAt)) {
     return next;
   }
 
@@ -3996,16 +4260,14 @@ function applyBattleOutcomeToCharacter({
 
   if (resultType === RESULT_TYPES.UNFINISHED) {
     next.training.progress.unfinishedTrainings += 1;
-    next.training.progress.lastProcessedMatchId = matchId || "";
-    next.training.progress.lastProcessedMatchAt = finishedAt;
+    markMatchProcessed(next, matchId, finishedAt);
     next.updatedAt = finishedAt;
     return next;
   }
 
   if (!finalCreditGranted) {
     next.training.progress.deniedTrainings += 1;
-    next.training.progress.lastProcessedMatchId = matchId || "";
-    next.training.progress.lastProcessedMatchAt = finishedAt;
+    markMatchProcessed(next, matchId, finishedAt);
     next.updatedAt = finishedAt;
     return next;
   }
@@ -4040,110 +4302,110 @@ function applyBattleOutcomeToCharacter({
     }
   }
 
-  next.training.progress.lastProcessedMatchId = matchId || "";
-  next.training.progress.lastProcessedMatchAt = finishedAt;
+  markMatchProcessed(next, matchId, finishedAt);
   next.updatedAt = finishedAt;
   return next;
 }
 
 async function saveFinishedMatchIfNeeded(roomCode, room) {
-  if (!room || room.status !== "finished") return;
+  if (room?.purpose === "exam") return saveExamResultIfNeeded(roomCode, room);
+  if (!room || room.status !== "finished" || !state.user) return;
+  const completedKey = `${state.user.uid}:${getStableMatchId(roomCode, room)}`;
+  if (state.completedMatchSaves.has(completedKey)) return;
   if (state.pendingMatchSaveRooms.has(roomCode)) return;
-
   state.pendingMatchSaveRooms.add(roomCode);
-
   try {
-    const preview = await getCreditPreviewForRoom(room);
     const battle = room.battle ? normalizeBattle(room.battle) : null;
     const participants = getParticipantsArray(room);
     const finishedAt = battle?.completedAt || room.finishInfo?.completedAt || now();
+    const matchId = getStableMatchId(roomCode, room);
+    // Eligibility is frozen when the training starts: the first saved result must not
+    // remove eligibility from players whose result is saved later.
+    const frozenPreview = room.creditPreview?.eligibleByParticipant;
+    const preview = frozenPreview && Object.keys(frozenPreview).length
+      ? room.creditPreview : await getCreditPreviewForRoom(room);
 
-    const myParticipants = participants.filter(p => p.uid === state.user?.uid);
-    const localMatchId = room.matchId || `${roomCode}_${finishedAt}`;
-
-    for (const participant of myParticipants) {
-      const enemyNames = participants
-        .filter(other => isEnemyParticipant(room.modeId, participant, other))
-        .map(other => other.characterName)
-        .join(", ");
-
-      await runTransaction(ref(db, getCharacterPath(participant.uid, participant.characterId)), rawCharacter => {
-        if (!rawCharacter) return rawCharacter;
+    const mine = participants.filter(p => p.uid === state.user.uid);
+    for (const participant of mine) {
+      const enemyNames = participants.filter(other => isEnemyParticipant(room.modeId, participant, other))
+        .map(other => other.characterName).join(", ");
+      await runTransaction(ref(db, getCharacterPath(participant.uid, participant.characterId)), raw => {
+        if (!raw) return;
+        if (wasMatchProcessed(raw, matchId, finishedAt)) return;
         return applyBattleOutcomeToCharacter({
-          character: rawCharacter,
+          character: raw,
           resultType: getParticipantResult(room, participant.uid),
           opponentName: enemyNames,
           finishedAt,
           creditGranted: Boolean(preview.eligibleByParticipant?.[participant.uid]?.getsCredit),
           creditReason: preview.eligibleByParticipant?.[participant.uid]?.reason || preview.reason,
           analyticsDelta: battle?.fighters?.[participant.uid]?.analytics || createBattleAnalyticsBlock(),
-          matchId: localMatchId
+          matchId
         });
       });
     }
-
-    if (myParticipants.length) {
+    if (mine.length) {
+      await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+        if (!raw || raw.status !== "finished") return;
+        raw.resultsSavedBy = { ...(raw.resultsSavedBy || {}), [state.user.uid]: true };
+        return raw;
+      });
       await loadOwnCharacters();
       renderProfile();
-      loadAndRenderHistory().catch(console.error);
+      if (state.currentScreen === "history") loadAndRenderHistory().catch(console.error);
     }
 
-    let claimToken = room.matchId || "";
-    if (claimToken) {
-      if (!isClaimToken(claimToken) || !isOwnClaimToken(claimToken)) return;
-    } else {
-      const claimed = await claimMatchWrite(roomCode);
-      if (!claimed || !isOwnClaimToken(claimed)) return;
-      claimToken = claimed;
+    // The old app used a generated push key as matchId. Never duplicate old completed history.
+    const existingHistoryId = room.matchId && !String(room.matchId).startsWith("claim_") ? room.matchId : "";
+    let historyCreated = false;
+    if (!existingHistoryId) {
+      const historyRef = ref(db, `trainingHistory/${matchId}`);
+      const payload = createHistoryRecordPayload(roomCode, room, preview);
+      const result = await runTransaction(historyRef, current => {
+        if (current) return; // Single history record even with simultaneous browser clients.
+        return payload;
+      });
+      historyCreated = result.committed;
+      // A pre-existing deterministic record also means history is already complete.
+      await runTransaction(ref(db, getRoomPath(roomCode)), raw => {
+        if (!raw || raw.status !== "finished") return;
+        if (raw.matchId && !String(raw.matchId).startsWith("claim_")) return;
+        raw.matchId = matchId;
+        raw.creditPreview = preview;
+        return raw;
+      });
     }
 
-    const latestRoomSnap = await get(ref(db, getRoomPath(roomCode)));
-    if (!latestRoomSnap.exists()) return;
-    const latestRoom = normalizeRoom(latestRoomSnap.val());
-    if (latestRoom.matchId !== claimToken) return;
-    if (!isOwnClaimToken(latestRoom.matchId)) return;
-
-    const historyRef = push(ref(db, "trainingHistory"));
-    const matchPayload = createHistoryRecordPayload(roomCode, latestRoom, preview);
-    await set(historyRef, matchPayload);
-
-    await update(ref(db, getRoomPath(roomCode)), {
-      matchId: historyRef.key,
-      creditPreview: preview
-    });
-
+    // Cooldowns are an idempotent maximum by completion date. Never let an old battle
+    // overwrite a later cooldown if players finish rooms in a different order.
     if (battle && battle.finishReason !== "timeout_unfinished") {
       for (let i = 0; i < participants.length; i += 1) {
         for (let j = i + 1; j < participants.length; j += 1) {
-          const a = participants[i];
-          const b = participants[j];
-          if (!isEnemyParticipant(latestRoom.modeId, a, b)) continue;
-
+          const a = participants[i], b = participants[j];
+          if (!isEnemyParticipant(room.modeId, a, b)) continue;
           const pairKey = getPairKey(a.uid, a.characterId, b.uid, b.characterId);
-          await set(ref(db, getPairCooldownPath(pairKey)), {
-            pairKey,
-            updatedAt: finishedAt,
+          const nextCooldown = {
+            pairKey, updatedAt: finishedAt,
             availableFromDateKey: addDaysToDateKey(getMoscowDateKey(finishedAt), PAIR_COOLDOWN_DAYS),
             lastCompletedDateKey: getMoscowDateKey(finishedAt),
-            leftCharacterName: a.characterName,
-            rightCharacterName: b.characterName
-          });
+            leftCharacterName: a.characterName, rightCharacterName: b.characterName
+          };
+          await runTransaction(ref(db, getPairCooldownPath(pairKey)), previous =>
+            previous && (previous.updatedAt || 0) >= finishedAt ? undefined : nextCooldown);
         }
       }
-
-      const creditedNames = participants
-        .filter(participant => preview.eligibleByParticipant?.[participant.uid]?.getsCredit)
-        .map(participant => participant.characterName);
-
-      if (creditedNames.length) {
-        await pushFeedEntry({
+      if (historyCreated) {
+        const names = participants.filter(p => preview.eligibleByParticipant?.[p.uid]?.getsCredit)
+          .map(p => p.characterName);
+        if (names.length) await pushFeedEntry({
           type: FEED_TYPES.CREDITED_TRAINING,
           createdAt: finishedAt,
-          text: `Последняя засчитанная тренировка: ${creditedNames.join(", ")}.`,
-          characterNames: creditedNames
+          text: `Последняя засчитанная тренировка: ${names.join(", ")}.`,
+          characterNames: names
         });
       }
     }
+    state.completedMatchSaves.add(completedKey);
   } finally {
     state.pendingMatchSaveRooms.delete(roomCode);
   }
@@ -4227,6 +4489,12 @@ function renderCharacterCard(item) {
           ${creditStats}
         </div>
 
+        <div class="exam-character-note">
+          <strong>Воинские испытания</strong>
+          <span>Пройдено: ${character.training.exams.passed} · Попыток: ${character.training.exams.attempts}</span>
+          ${isApprentice ? `<span>Подготовка к испытанию: +${examPreparationBonus(progress.creditedTrainings)} балл(а), зачётных тренировок: ${progress.creditedTrainings}</span>` : ""}
+          ${character.training.exams.latest ? `<span>Последнее: ${escapeHtml(EXAM_STATUS_TEXT[character.training.exams.latest.status] || "Испытание завершено")}</span>` : ""}
+        </div>
         <div class="character-upgrades-wrap">
           <div class="character-upgrades-block">
             <div class="character-detail-title">Текущий прогресс</div>
@@ -4237,7 +4505,7 @@ function renderCharacterCard(item) {
           </div>
 
           <div class="character-upgrades-block">
-            <div class="character-detail-title">Боевые параметры</div>
+            <div class="character-detail-title">Бонусы для ролевых сражений вне приложения</div>
             <div class="character-progress-line">Точность: ${combat.accuracy}%</div>
             <div class="character-progress-line">Уворот: ${combat.dodge}%</div>
             <div class="character-progress-line">Сила лапы: ${combat.clawPower}%</div>
@@ -4368,7 +4636,10 @@ async function loadAndRenderHistory() {
     .filter(item => safeArray(item.participants).some(participant => participant.uid === state.user.uid))
     .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
 
-  if (!mine.length) {
+  const exams = Object.values(state.characters || {}).flatMap(char =>
+    Object.values(normalizeCharacter(char).training.exams.records || {}))
+    .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+  if (!mine.length && !exams.length) {
     html(ui.history.list, `
       <div class="empty-state-card">
         <div class="empty-state-mark">✦</div>
@@ -4380,7 +4651,7 @@ async function loadAndRenderHistory() {
 
   html(
     ui.history.list,
-    mine.map(item => {
+    `<div class="exam-history-head">Обычные тренировки</div>` + mine.map(item => {
       const myParticipants = safeArray(item.participants).filter(participant => participant.uid === state.user.uid);
       const resultText = myParticipants.map(p => `${p.characterName}: ${p.result === "win" ? "победа" : p.result === "loss" ? "поражение" : p.result === "draw" ? "ничья" : "без итога"}`).join(" · ");
       return `
@@ -4396,7 +4667,12 @@ async function loadAndRenderHistory() {
           <div class="history-item-result">${escapeHtml(resultText)}</div>
         </div>
       `;
-    }).join("")
+    }).join("") + `<div class="exam-history-head">Воинские испытания</div>` +
+    (exams.length ? exams.map(item => `<div class="history-item-card exam-history-card">
+      <div class="history-item-top"><strong>${escapeHtml(item.characterName || "Оруженосец")}</strong><span>${escapeHtml(formatDate(item.finishedAt))}</span></div>
+      <div class="history-item-result">${escapeHtml(EXAM_STATUS_TEXT[item.status] || "Испытание завершено")}</div>
+      <div class="history-item-meta">Мастерство ${item.mastery}/3 · Стойкость ${item.endurance}/3 · Тактика ${item.tactics}/3 · Подготовка +${item.preparation} · Всего ${item.total}/11</div>
+    </div>`).join("") : `<div class="empty-state-card">Испытаний пока не было.</div>`)
   );
 }
 
@@ -4515,10 +4791,12 @@ function renderAdmin() {
     ui.admin.playersList,
     userEntries.length
       ? userEntries.map(([uid, block]) => `
-        <div class="admin-user-card">
+        <button type="button" class="admin-user-card admin-user-open" data-admin-uid="${escapeHtml(uid)}"
+          aria-label="История тренировок: ${escapeHtml(block.profile?.displayName || "Игрок")}">
           <div class="admin-user-name">${escapeHtml(block.profile?.displayName || "Игрок")}</div>
           <div class="admin-user-meta">${escapeHtml(uid)}</div>
-        </div>
+          <div class="admin-user-hint">Показать историю →</div>
+        </button>
       `).join("")
       : `<div class="empty-inline">Пока пусто.</div>`
   );
@@ -4583,7 +4861,39 @@ function renderAdmin() {
       : `<div class="empty-inline">История пуста.</div>`
   );
 
-  html(ui.admin.playerHistoryList, `<div class="empty-inline">Выберите игрока в будущем.</div>`);
+  if (state.selectedAdminUserId && !state.adminUsersCache[state.selectedAdminUserId]) {
+    state.selectedAdminUserId = "";
+  }
+  renderSelectedAdminHistory(sortedMatches);
+  ui.admin.playersList?.querySelectorAll(".admin-user-open").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.selectedAdminUserId = btn.dataset.adminUid;
+      renderSelectedAdminHistory(sortedMatches);
+    });
+  });
+}
+
+function renderSelectedAdminHistory(sortedMatches) {
+  if (!state.isAdmin || !ui.admin.playerHistoryList) return;
+  const uid = state.selectedAdminUserId;
+  if (!uid) {
+    html(ui.admin.playerHistoryList, `<div class="empty-inline">Выберите игрока в списке выше.</div>`);
+    return;
+  }
+  const name = state.adminUsersCache?.[uid]?.profile?.displayName || "Игрок";
+  const mine = sortedMatches.filter(match => safeArray(match.participants).some(p => p.uid === uid));
+  html(ui.admin.playerHistoryList, `
+    <div class="admin-history-heading">${escapeHtml(name)} · ${mine.length} тренировок</div>
+    ${mine.length ? mine.map(match => {
+      const part = safeArray(match.participants).filter(p => p.uid === uid);
+      const details = part.map(p => `${p.characterName}: ${p.result === "win" ? "победа" : p.result === "loss" ? "поражение" : p.result === "draw" ? "ничья" : "не завершена"}${p.getsCredit ? " (зачёт)" : " (без зачёта)"}`).join(" · ");
+      return `<div class="admin-match-card">
+        <div class="admin-match-title">${escapeHtml(getModeLabel(match.modeId))}</div>
+        <div class="admin-match-meta">${escapeHtml(formatDate(match.finishedAt))}</div>
+        <div class="admin-match-result">${escapeHtml(details)}</div>
+      </div>`;
+    }).join("") : `<div class="empty-inline">Пока нет завершённых тренировок.</div>`}
+  `);
 }
 
 function setScreen(screenName) {
@@ -4939,7 +5249,12 @@ function bindStaticEvents() {
     notify("Код комнаты скопирован.");
   });
 
+  byId("roomPurposeSelect")?.addEventListener("change", event => {
+    if (!state.currentRoomCode) { updatePurposeControls({purpose:event.target.value}); return; }
+    setRoomPurpose(event.target.value).catch(error => notifyError(error.message));
+  });
   byId("groupModeSelect")?.addEventListener("change", event => {
+    if (!state.currentRoomCode) { updatePurposeControls(null); return; }
     setRoomMode(event.target.value).catch(error => notifyError(error.message));
   });
 
